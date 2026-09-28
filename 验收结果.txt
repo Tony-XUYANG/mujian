@@ -1,0 +1,30 @@
+PASS 1: 真实数据库连接
+PASS 2: 公开内容列表
+PASS 3: 错误密码拒绝登录
+PASS 4: 用户注册且不能自选管理员
+PASS 5: 用户名唯一约束
+PASS 6: 注册字段校验
+PASS 7: 普通用户禁止后台查询
+PASS 8: 匿名禁止后台操作
+PASS 9: 无效token拒绝
+PASS 10: 过期token拒绝
+PASS 11: 管理员登录
+PASS 12: 管理员新增
+PASS 13: 普通用户禁止后台修改
+PASS 14: 拒绝不安全资源地址
+PASS 15: 管理员编辑与前台同步
+PASS 16: 未登录不能点赞
+PASS 17: 重复点赞幂等
+PASS 18: 并发收藏唯一约束
+PASS 19: 重新登录后数据持久化
+PASS 20: 个人收藏列表
+PASS 21: 重复取消点赞幂等
+PASS 22: 播放计数更新
+PASS 23: 搜索短剧
+PASS 24: 管理员删除
+PASS 25: 删除后前台不可访问
+PASS 26: 删除级联清理收藏
+PASS 27: 本地视频支持拖动播放
+PASS 28: 前端已集成到Java服务
+
+28 checks passed. Temporary user: verify_mukx3jow
