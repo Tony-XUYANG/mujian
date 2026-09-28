@@ -1,5 +1,6 @@
 export type User = { id: number; username: string; nickname: string; role: 'USER'|'ADMIN' };
-export type Drama = { id: number; title: string; coverImg: string; description: string; videoUrl: string; category: string; viewCount: number; likeCount: number; favoriteCount: number; liked: boolean|number; favorited: boolean|number; createTime: string };
+export type Drama = { id: number; title: string; coverImg: string; description: string; videoUrl: string; category: string; viewCount: number; likeCount: number; favoriteCount: number; liked: boolean|number; favorited: boolean|number; createTime: string; progressSec?: number; durationSec?: number; lastWatched?: string };
+export type Comment = { id: number; content: string; nickname: string; avatar: string; createTime: string };
 export type DramaInput = Pick<Drama,'title'|'coverImg'|'description'|'videoUrl'|'category'>;
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {

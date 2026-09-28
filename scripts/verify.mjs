@@ -38,6 +38,10 @@ try {
   await request(`/dramas/${id}/like`,'DELETE',undefined,token);
   const unliked=await request(`/dramas/${id}/like`,'DELETE',undefined,token);check('重复取消点赞幂等',unliked.status===200&&unliked.data.likeCount===0);
   const views=await request(`/dramas/${id}/view`,'POST');check('播放计数更新',views.status===200&&views.data.viewCount===1);
+  const commentsOpen=await request(`/dramas/${id}/comments`);check('匿名可查看剧友评论',commentsOpen.status===200&&Array.isArray(commentsOpen.data));
+  const comment=await request(`/dramas/${id}/comments`,'POST',{content:'验收评论：节奏很舒服。'},token);check('登录用户发表评论',comment.status===201&&comment.data.content.includes('节奏'));
+  const progress=await request(`/dramas/${id}/progress`,'PUT',{progressSec:12,durationSec:60},token);check('观看进度同步',progress.status===200&&progress.data.progressSec===12);
+  const history=await request('/me/history','GET',undefined,token);check('继续观看历史',history.status===200&&history.data.some(d=>d.id===id&&d.progressSec===12));
   const search=await request('/dramas?q='+encodeURIComponent('验收已更新'));check('搜索短剧',search.data.some(d=>d.id===id));
 } finally {
   const deleted=await request('/admin/dramas/'+id,'DELETE',undefined,adminToken);check('管理员删除',deleted.status===200);
@@ -46,4 +50,6 @@ check('删除后前台不可访问',(await request('/dramas/'+id)).status===404)
 const remaining=await request('/me/favorites','GET',undefined,token);check('删除级联清理收藏',!remaining.data.some(d=>d.id===id));
 const video=await fetch(base+'/media/sintel-trailer.mp4',{headers:{Range:'bytes=0-1023'}});check('本地视频支持拖动播放',video.status===206&&(await video.arrayBuffer()).byteLength===1024);
 const home=await fetch(base+'/');check('前端已集成到Java服务',home.status===200&&(await home.text()).includes('幕间'));
+const manifest=await fetch(base+'/manifest.webmanifest');check('App安装清单可访问',manifest.status===200&&(await manifest.text()).includes('standalone'));
+const worker=await fetch(base+'/sw.js');check('App离线缓存脚本可访问',worker.status===200&&(await worker.text()).includes('mujian-app-v1'));
 console.log(`\n${passed} checks passed. Temporary user: ${username}`);

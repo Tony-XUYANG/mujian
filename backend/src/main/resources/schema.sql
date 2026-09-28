@@ -42,3 +42,27 @@ CREATE TABLE IF NOT EXISTS user_like (
   CONSTRAINT fk_like_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
   CONSTRAINT fk_like_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS watch_history (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  drama_id BIGINT NOT NULL,
+  progress_sec INT NOT NULL DEFAULT 0,
+  duration_sec INT NOT NULL DEFAULT 0,
+  last_watched TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT uk_watch_history UNIQUE (user_id,drama_id),
+  CONSTRAINT fk_history_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_history_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
+  CONSTRAINT ck_history_progress CHECK (progress_sec >= 0 AND duration_sec >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS drama_comment (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  drama_id BIGINT NOT NULL,
+  content VARCHAR(500) NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_comment_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_comment_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
+  INDEX idx_comment_drama_time (drama_id,create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
