@@ -7,7 +7,20 @@ import './style.css';
 const categories = ['全部','都市','悬疑','治愈','古装','爱情'];
 const emptyInput: DramaInput = { title:'', coverImg:'/media/forest.jpg', description:'', videoUrl:'/media/sintel-trailer.mp4', category:'都市' };
 type Notice = { text:string; error?:boolean };
-const routeNow = () => window.location.hash.replace('#','') || 'home';
+type DownloadedDrama = Pick<Drama,'id'|'title'|'category'|'coverImg'|'videoUrl'>;
+const DOWNLOADS_KEY = 'mujian_downloads';
+function readDownloads(): DownloadedDrama[] {
+  try {
+    const items = JSON.parse(localStorage.getItem(DOWNLOADS_KEY) || '[]');
+    return Array.isArray(items) ? items.filter((item): item is DownloadedDrama => Number.isSafeInteger(item?.id) && typeof item?.videoUrl === 'string' && typeof item?.title === 'string') : [];
+  } catch { return []; }
+}
+const sharedDramaId = () => {
+  const match = /^#watch\/([1-9]\d*)$/.exec(window.location.hash);
+  const id = Number(match?.[1]);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+};
+const routeNow = () => sharedDramaId() ? 'home' : window.location.hash.replace('#','') || 'home';
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{outcome:'accepted'|'dismissed'}> };
 
 function App() {
@@ -22,33 +35,45 @@ function App() {
   const [error,setError]=useState('');
   const [refresh,setRefresh]=useState(0);
   const [auth,setAuth]=useState(false);
-  const [selected,setSelected]=useState<number|null>(null);
+  const [selected,setSelected]=useState<number|null>(sharedDramaId);
   const [notice,setNotice]=useState<Notice|null>(null);
   const [ready,setReady]=useState(false);
   const [installPrompt,setInstallPrompt]=useState<InstallPrompt|null>(null);
+  const [downloads,setDownloads]=useState<DownloadedDrama[]>(readDownloads);
   const toast=(text:string,error=false)=>setNotice({text,error});
   const reload=()=>setRefresh(n=>n+1);
-  useEffect(()=>{ const change=()=>{setRoute(routeNow());setQuery('');setSearch('');setCategory('全部');};window.addEventListener('hashchange',change); return()=>window.removeEventListener('hashchange',change);},[]);
+  useEffect(()=>{ const change=()=>{setRoute(routeNow());setSelected(sharedDramaId());setQuery('');setSearch('');setCategory('全部');};window.addEventListener('hashchange',change); return()=>window.removeEventListener('hashchange',change);},[]);
   useEffect(()=>{const t=setTimeout(()=>setSearch(query.trim()),250);return()=>clearTimeout(t);},[query]);
   useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(null),3500);return()=>clearTimeout(t);},[notice]);
   useEffect(()=>{const onInstall=(event:Event)=>{event.preventDefault();setInstallPrompt(event as InstallPrompt);};window.addEventListener('beforeinstallprompt',onInstall);return()=>window.removeEventListener('beforeinstallprompt',onInstall);},[]);
+  useEffect(()=>{const update=()=>setDownloads(readDownloads());window.addEventListener('downloads-changed',update);return()=>window.removeEventListener('downloads-changed',update);},[]);
   useEffect(()=>{
-    if(sessionStorage.getItem('mujian_token')) api<User>('/auth/me').then(setUser).catch(()=>sessionStorage.removeItem('mujian_token')).finally(()=>setReady(true));
-    else setReady(true);
+    let active=true;
+    const restore=()=>{
+      const token=sessionStorage.getItem('mujian_token');
+      if(token)api<User>('/auth/me').then(data=>{if(active&&sessionStorage.getItem('mujian_token')===token)setUser(data);}).catch(()=>undefined).finally(()=>{if(active)setReady(true);});
+      else if(active)setReady(true);
+    };
     const expire=()=>{setUser(null);setAuth(true);toast('登录已过期，请重新登录',true);};
-    window.addEventListener('session-expired',expire);return()=>window.removeEventListener('session-expired',expire);
+    window.addEventListener('session-expired',expire);window.addEventListener('online',restore);restore();
+    return()=>{active=false;window.removeEventListener('session-expired',expire);window.removeEventListener('online',restore);};
   },[]);
   useEffect(()=>{
     if(!ready)return;
     let active=true;
     if((route==='favorites'||route==='history')&&!user){setDramas([]);setLoading(false);setError('');return;}
-    if(route==='profile'){setDramas([]);setLoading(false);setError('');return;}
+    if(route==='profile'||route==='offline'||route==='admin'){setDramas([]);setLoading(false);setError('');return;}
     setLoading(true);setError('');
     const path=route==='favorites'?'/me/favorites':route==='history'?'/me/history':`/dramas?q=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&sort=${route==='popular'?'popular':sort}`;
     api<Drama[]>(path).then(data=>{if(active)setDramas(data);}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});
     return()=>{active=false;};
   },[ready,user,route,search,category,sort,refresh]);
   const navigate=(target:string)=>{window.location.hash=target;setSelected(null);};
+  const closePlayer=()=>{if(sharedDramaId())window.history.replaceState(null,'','#home');setSelected(null);};
+  async function removeHistory(id:number){
+    try{await api(`/me/history/${id}`,{method:'DELETE'});setDramas(current=>current.filter(d=>d.id!==id));toast('已移除观看记录');}
+    catch(e){toast((e as Error).message,true);}
+  }
   const logout=()=>{sessionStorage.removeItem('mujian_token');setUser(null);navigate('home');toast('已退出登录');};
   const login=(data:{token:string;user:User})=>{sessionStorage.setItem('mujian_token',data.token);setUser(data.user);setAuth(false);reload();toast(`欢迎回来，${data.user.nickname}`);};
   const featured=dramas.find(d=>d.title==='等风，也等你')||dramas[0];
@@ -72,10 +97,11 @@ function App() {
     <div className="main-shell">
       <header className="topbar"><span className="top-location">{route==='admin'?'创作者工作台':route==='favorites'?'我的片单':route==='popular'?'人气榜单':route==='history'?'继续观看':route==='profile'?'个人中心':'发现'}<ChevronRight size={14}/><span>{route==='admin'?'内容管理':route==='profile'?'幕间 App':'幕间短剧'}</span></span>
         {isLibrary&&<div className="search-box"><Search size={17}/><input aria-label="搜索短剧" placeholder="搜索一部好故事…" value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button className="icon-button" aria-label="清空搜索" onClick={()=>setQuery('')}><X size={14}/></button>}</div>}
+        <button className="icon-button offline-entry" onClick={()=>navigate('offline')} aria-label="打开离线片库" title={`离线片库 · ${downloads.length} 部`}><Download size={18}/>{downloads.length>0&&<span className="offline-count">{downloads.length}</span>}</button>
         <div className="account">{user?<><span className="avatar">{user.nickname.slice(0,1)}</span><span className="nickname">{user.nickname}</span><button className="icon-button" onClick={logout} aria-label="退出登录" title="退出登录"><LogOut size={17}/></button></>:<button className="login-button" onClick={()=>setAuth(true)}>登录 / 注册<ArrowUpRight size={15}/></button>}</div>
       </header>
       <main>
-        {route==='admin'?<Admin user={user} toast={toast} onLogin={()=>setAuth(true)} onView={setSelected} onChange={reload}/>:route==='profile'?<Profile user={user} onLogin={()=>setAuth(true)} onNavigate={navigate} onInstall={install}/>:<>
+        {route==='admin'?<Admin user={user} toast={toast} onLogin={()=>setAuth(true)} onView={setSelected} onChange={reload}/>:route==='offline'?<OfflineLibrary items={downloads} toast={toast} onNavigate={navigate}/>:route==='profile'?<Profile user={user} onLogin={()=>setAuth(true)} onNavigate={navigate} onInstall={install}/>:<>
           {isHome&&!search&&category==='全部'&&<div className="page-intro"><div><p className="eyebrow">A LITTLE BREAK. A GREAT STORY.</p><h1>好故事，<span>随时入戏。</span></h1></div><div className="intro-actions"><button className="secondary mood-button" onClick={()=>{if(!dramas.length)return;setSelected(dramas[Math.floor(Math.random()*dramas.length)].id);}}><Sparkles size={15}/>心情选剧</button><span className="edition"><span/> 即刻开启你的观剧时光</span></div></div>}
           {isHome&&!search&&category==='全部'&&featured&&!loading&&<section className="hero" style={{backgroundImage:`url("${featured.coverImg}")`}} aria-label="今日精选">
             <div className="hero-shade"/><div className="hero-content"><div className="hero-label"><span/> 幕间精选 <span className="label-sep">/</span> EDITOR'S PICK</div><h2>{featured.title}</h2><p className="hero-subtitle">在故事里，遇见另一种人生。</p><p className="hero-description">{featured.description}</p><div className="hero-meta"><span>{featured.category}</span><span>精选短片</span><span>免费观赏</span></div><button className="primary hero-play" onClick={()=>setSelected(featured.id)}><Play size={17} fill="currentColor"/>立即观看<ChevronRight size={16}/></button></div><div className="hero-index"><span>01</span> / {String(dramas.length).padStart(2,'0')}<div className="hero-progress"><i/></div></div><div className="hero-vertical">LET THE STORY BEGIN</div>
@@ -83,24 +109,28 @@ function App() {
           <section className="library">
             <div className="section-top"><div><p className="eyebrow">{route==='favorites'?'YOUR PERSONAL COLLECTION':route==='popular'?'STORIES IN THE SPOTLIGHT':route==='history'?'PICK UP WHERE YOU LEFT OFF':'FIND YOUR NEXT FAVORITE'}</p><h2>{route==='favorites'?'舍不得错过的故事':route==='popular'?'正在被看见的好剧':route==='history'?'继续看完你的故事':search?`搜索「${search}」`:'值得停留的好剧'}<span className="total">{dramas.length} 部</span></h2></div>{route!=='favorites'&&route!=='popular'&&route!=='history'&&<div className="sort-control"><SlidersHorizontal size={15}/><select aria-label="排序方式" value={sort} onChange={e=>setSort(e.target.value)}><option value="latest">最新上架</option><option value="popular">最多播放</option></select></div>}</div>
             {route!=='favorites'&&route!=='history'&&<div className="categories" aria-label="短剧分类">{categories.map(c=><button key={c} className={category===c?'category selected':'category'} onClick={()=>setCategory(c)}>{c}</button>)}</div>}
-            {error?<div className="empty"><AlertCircle/><h3>暂时没能加载故事</h3><p>{error}</p><button className="secondary" onClick={reload}>重新加载</button></div>:loading?<div className="drama-grid">{Array.from({length:8},(_,i)=><div className="skeleton" key={i}/>)}</div>:(route==='favorites'||route==='history')&&!user?<div className="empty"><Bookmark size={34}/><h3>登录后，故事会记住你</h3><p>收藏和观看进度会在不同设备间同步。</p><button className="primary" onClick={()=>setAuth(true)}>登录幕间 App</button></div>:!dramas.length?<div className="empty"><Film size={34}/><h3>{route==='favorites'?'你的片单，等待第一个故事':route==='history'?'还没有观看记录':'没有找到相关短剧'}</h3><p>{route==='favorites'?'去发现页逛逛，收藏一部喜欢的短剧吧。':route==='history'?'打开一部短剧，播放几秒后这里就会出现。':'试试其他关键词，或切换一个分类。'}</p><button className="secondary" onClick={()=>{setCategory('全部');setQuery('');navigate('home');}}>发现好剧</button></div>:<div className="drama-grid">{dramas.filter(d=>!['favorites','history'].includes(route)||!search||d.title.includes(search)).map((d,i)=><button className="drama-card" key={d.id} onClick={()=>setSelected(d.id)} aria-label={`观看${d.title}`}><div className="poster"><img src={d.coverImg} alt={d.title+'封面'} loading="lazy" onError={e=>{e.currentTarget.style.opacity='0';}}/><div className="poster-overlay"/><span className="poster-tag">{d.category}</span>{route==='popular'&&<span className="rank">{String(i+1).padStart(2,'0')}</span>}{route==='history'&&d.progressSec&&d.durationSec&&<span className="progress-pill"><Clock3 size={11}/> {Math.round(d.progressSec/d.durationSec*100)}%</span>}<span className="poster-title">{d.title}</span><span className="poster-subtitle">幕间 · 精选短片</span><span className="play-hover"><Play size={23} fill="currentColor"/></span><span className="poster-bottom"><Play size={12} fill="currentColor"/> {count(d.viewCount)} 次播放{Boolean(d.favorited)&&<Bookmark size={14} fill="currentColor"/>}</span></div><div className="card-title"><h3>{d.title}</h3><ArrowUpRight size={16}/></div><p>{d.category} <span>·</span> {count(d.likeCount)} 人喜欢</p></button>)}</div>}
+            {error?<div className="empty"><AlertCircle/><h3>暂时没能加载故事</h3><p>{error}</p><button className="secondary" onClick={reload}>重新加载</button></div>:loading?<div className="drama-grid">{Array.from({length:8},(_,i)=><div className="skeleton" key={i}/>)}</div>:(route==='favorites'||route==='history')&&!user?<div className="empty"><Bookmark size={34}/><h3>登录后，故事会记住你</h3><p>收藏和观看进度会在不同设备间同步。</p><button className="primary" onClick={()=>setAuth(true)}>登录幕间 App</button></div>:!dramas.length?<div className="empty"><Film size={34}/><h3>{route==='favorites'?'你的片单，等待第一个故事':route==='history'?'还没有观看记录':'没有找到相关短剧'}</h3><p>{route==='favorites'?'去发现页逛逛，收藏一部喜欢的短剧吧。':route==='history'?'打开一部短剧，播放几秒后这里就会出现。':'试试其他关键词，或切换一个分类。'}</p><button className="secondary" onClick={()=>{setCategory('全部');setQuery('');navigate('home');}}>发现好剧</button></div>:<div className="drama-grid">{dramas.filter(d=>!['favorites','history'].includes(route)||!search||d.title.includes(search)).map((d,i)=><div className="drama-item" key={d.id}><button className="drama-card" onClick={()=>setSelected(d.id)} aria-label={`观看${d.title}`}><div className="poster"><img src={d.coverImg} alt={d.title+'封面'} loading="lazy" onError={e=>{e.currentTarget.style.opacity='0';}}/><div className="poster-overlay"/><span className="poster-tag">{d.category}</span>{route==='popular'&&<span className="rank">{String(i+1).padStart(2,'0')}</span>}{route==='history'&&d.progressSec&&d.durationSec&&<span className="progress-pill"><Clock3 size={11}/> {Math.round(d.progressSec/d.durationSec*100)}%</span>}<span className="poster-title">{d.title}</span><span className="poster-subtitle">幕间 · 精选短片</span><span className="play-hover"><Play size={23} fill="currentColor"/></span><span className="poster-bottom"><Play size={12} fill="currentColor"/> {count(d.viewCount)} 次播放{Boolean(d.favorited)&&<Bookmark size={14} fill="currentColor"/>}</span></div><div className="card-title"><h3>{d.title}</h3><ArrowUpRight size={16}/></div><p>{d.category} <span>·</span> {count(d.likeCount)} 人喜欢</p></button>{route==='history'&&<button className="history-remove icon-button" aria-label={`移除${d.title}的观看记录`} title="移除观看记录" onClick={()=>void removeHistory(d.id)}><Trash2 size={15}/></button>}</div>)}</div>}
           </section><footer><span className="footer-brand">幕间 <i>MUJIAN</i></span><span>片刻闲暇，一场好故事。</span><span>演示内容 · 免费观赏</span></footer>
         </>}
       </main>
     </div>
     {auth&&<AuthModal onClose={()=>setAuth(false)} onSuccess={login}/>}
-    {selected!==null&&<Player key={selected} id={selected} user={user} onClose={()=>setSelected(null)} onLogin={()=>setAuth(true)} toast={toast} onChange={reload}/>} 
+    {selected!==null&&<Player key={selected} id={selected} user={user} onClose={closePlayer} onLogin={()=>setAuth(true)} toast={toast} onChange={reload}/>}
     {notice&&<div className={'toast'+(notice.error?' toast-error':'')} role="status">{notice.error?<AlertCircle size={18}/>:<CheckCircle2 size={18}/>} {notice.text}</div>}
   </div>;
 }
 
 function Modal({children,onClose,className='',label}:{children:React.ReactNode;onClose:()=>void;className?:string;label:string}) {
   const ref=useRef<HTMLDivElement>(null);
+  const closeRef=useRef(onClose);
+  closeRef.current=onClose;
   useEffect(()=>{
     const before=document.activeElement as HTMLElement|null; const old=document.body.style.overflow; document.body.style.overflow='hidden';
     ref.current?.querySelector<HTMLElement>('button,input')?.focus();
     const key=(e:KeyboardEvent)=>{
-      if(e.key==='Escape'){e.stopImmediatePropagation();onClose();}
+      const topDialog=Array.from(document.querySelectorAll<HTMLElement>('.modal-backdrop')).sort((a,b)=>Number(getComputedStyle(a).zIndex)-Number(getComputedStyle(b).zIndex)).at(-1);
+      if(topDialog!==ref.current?.parentElement)return;
+      if(e.key==='Escape'){e.stopImmediatePropagation();closeRef.current();}
       if(e.key==='Tab'){
         const nodes=ref.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input,textarea,select,a[href],video[controls]');
         if(!nodes?.length)return;const first=nodes[0],last=nodes[nodes.length-1];
@@ -118,28 +148,98 @@ function AuthModal({onClose,onSuccess}:{onClose:()=>void;onSuccess:(data:{token:
   return <Modal onClose={onClose} className="auth-overlay" label={register?'注册账号':'登录账号'}><button className="close icon-button" onClick={onClose} aria-label="关闭登录窗口"><X/></button><span className="brand-icon"><Play size={23} fill="currentColor"/></span><p className="eyebrow">WELCOME TO MUJIAN</p><h2>{register?'好故事，从这里开始':'欢迎回到故事里'}</h2><p className="muted">{register?'创建账号，收藏属于你的心动瞬间。':'登录幕间，让喜欢的故事不再错过。'}</p><div className="auth-tabs"><button className={!register?'selected':''} onClick={()=>{setRegister(false);setError('');}}>登录</button><button className={register?'selected':''} onClick={()=>{setRegister(true);setError('');}}>注册</button></div><form onSubmit={submit}><label>用户名<input autoComplete="username" value={username} onChange={e=>setUsername(e.target.value)} placeholder="3–24位字母、数字或下划线" required minLength={3} maxLength={24} pattern="[A-Za-z0-9_]{3,24}"/></label>{register&&<label>昵称<input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="故事里怎么称呼你" required maxLength={30}/></label>}<label>密码<input type="password" autoComplete={register?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder={register?'至少8位密码':'请输入密码'} required minLength={register?8:undefined} maxLength={64}/></label>{error&&<p className="form-error" role="alert"><AlertCircle size={15}/>{error}</p>}<button className="primary full" disabled={busy}>{busy?<LoaderCircle className="spin" size={18}/>:register?'创建账号并登录':'登录幕间'}<ArrowUpRight size={17}/></button></form>{!register&&<details className="demo-login"><summary>快速体验演示账号</summary><div><button onClick={()=>{setUsername('demo');setPassword('Demo123!');}}>普通用户</button><button onClick={()=>{setUsername('admin');setPassword('Admin123!');}}>管理员</button></div><p>本地演示账号，仅用于体验。</p></details>}</Modal>;
 }
 function Player({id,user,onClose,onLogin,toast,onChange}:{id:number;user:User|null;onClose:()=>void;onLogin:()=>void;toast:(s:string,error?:boolean)=>void;onChange:()=>void}){
-  const [drama,setDrama]=useState<Drama|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[videoError,setVideoError]=useState(false),[comments,setComments]=useState<Comment[]>([]),[commentText,setCommentText]=useState(''),[commentBusy,setCommentBusy]=useState(false),[offline,setOffline]=useState(false);
-  const counted=useRef(false), videoRef=useRef<HTMLVideoElement>(null);
-  useEffect(()=>{let active=true;Promise.all([api<Drama>('/dramas/'+id),api<Comment[]>('/dramas/'+id+'/comments')]).then(([d,c])=>{if(active){setDrama(d);setComments(c);}}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id,user]);
+  const [drama,setDrama]=useState<Drama|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[videoError,setVideoError]=useState(false),[comments,setComments]=useState<Comment[]>([]),[commentText,setCommentText]=useState(''),[commentBusy,setCommentBusy]=useState(false),[offline,setOffline]=useState(false),[cacheBusy,setCacheBusy]=useState(false),[restored,setRestored]=useState(0);
+  const counted=useRef(false), videoRef=useRef<HTMLVideoElement>(null), resumed=useRef(false), lastSaved=useRef(-1), lastCheckpoint=useRef(0);
+  useEffect(()=>{let active=true;setDrama(null);resumed.current=false;lastSaved.current=-1;lastCheckpoint.current=Date.now();setRestored(0);setVideoError(false);setError('');Promise.all([api<Drama>('/dramas/'+id),api<Comment[]>('/dramas/'+id+'/comments')]).then(([d,c])=>{if(active){setDrama(d);setComments(c);}}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[id,user?.id]);
+  useEffect(()=>{let active=true;if(drama&&'caches' in window)caches.open('mujian-offline-v1').then(cache=>cache.match(drama.videoUrl)).then(cached=>{if(active)setOffline(Boolean(cached)&&readDownloads().some(item=>item.id===id));}).catch(()=>{});return()=>{active=false;};},[id,drama?.videoUrl]);
+  useEffect(()=>{const video=videoRef.current;if(drama&&video?.readyState&&!resumed.current)restoreProgress();},[drama]);
   async function interact(kind:'like'|'favorite'){
     if(!user){onLogin();return;}if(!drama||busy)return;setBusy(true);
     const active=kind==='like'?drama.liked:drama.favorited;
     try{setDrama(await api<Drama>(`/dramas/${id}/${kind}`,{method:active?'DELETE':'PUT'}));onChange();toast(active?(kind==='like'?'已取消点赞':'已取消收藏'):(kind==='like'?'喜欢已送达':'已加入我的收藏'));}catch(e){toast((e as Error).message,true);}finally{setBusy(false);}
   }
   function view(){if(counted.current)return;counted.current=true;api<Drama>(`/dramas/${id}/view`,{method:'POST'}).then(d=>{setDrama(old=>old?{...old,viewCount:d.viewCount}:old);onChange();}).catch(()=>{counted.current=false;});}
-  async function saveProgress(){const video=videoRef.current;if(!user||!video||!video.currentTime)return;try{await api(`/dramas/${id}/progress`,{method:'PUT',body:JSON.stringify({progressSec:Math.floor(video.currentTime),durationSec:Math.floor(video.duration||0)})});}catch{/* progress is best effort when the network changes */}}
+  function restoreProgress(){
+    const video=videoRef.current;
+    if(!user||!video||!drama||resumed.current||!Number.isFinite(video.duration))return;
+    resumed.current=true;
+    const progress=drama.progressSec||0;
+    if(user&&progress>0&&progress<video.duration-2){video.currentTime=progress;setRestored(progress);}
+  }
+  async function saveProgress(){
+    const video=videoRef.current;
+    if(!user||!video||!Number.isFinite(video.duration))return;
+    const progressSec=Math.floor(video.currentTime),durationSec=Math.floor(video.duration);
+    if(progressSec===lastSaved.current||(!progressSec&&lastSaved.current<0))return;
+    const previous=lastSaved.current;lastSaved.current=progressSec;
+    try{await api(`/dramas/${id}/progress`,{method:'PUT',keepalive:true,body:JSON.stringify({progressSec,durationSec})});onChange();}
+    catch{if(lastSaved.current===progressSec)lastSaved.current=previous;}
+  }
+  function checkpoint(){if(Date.now()-lastCheckpoint.current<15000)return;lastCheckpoint.current=Date.now();void saveProgress();}
   async function addComment(e:React.FormEvent){e.preventDefault();if(!user){onLogin();return;}if(!commentText.trim()||commentBusy)return;setCommentBusy(true);try{const item=await api<Comment>(`/dramas/${id}/comments`,{method:'POST',body:JSON.stringify({content:commentText.trim()})});setComments(current=>[item,...current]);setCommentText('');toast('评论已发布');}catch(e){toast((e as Error).message,true);}finally{setCommentBusy(false);}}
-  async function share(){const url=window.location.origin+'/#home';try{if(navigator.share)await navigator.share({title:drama?.title||'幕间短剧',text:'来幕间看一部好故事',url});else{await navigator.clipboard.writeText(url);toast('分享链接已复制');}}catch{/* user cancelled native share */}}
-  async function cacheVideo(){if(!drama)return;try{const cache=await caches.open('mujian-offline-v1');await cache.add(drama.videoUrl);setOffline(true);toast('已加入离线缓存，可在网络不稳定时继续打开');}catch{toast('当前浏览器不支持离线缓存，请先安装 App',true);}}
+  async function share(){const url=window.location.origin+`/#watch/${id}`;try{if(navigator.share)await navigator.share({title:drama?.title||'幕间短剧',text:'来幕间看一部好故事',url});else{await navigator.clipboard.writeText(url);toast('分享链接已复制');}}catch(e){if(!(e instanceof DOMException&&e.name==='AbortError'))toast('分享失败，请检查浏览器权限',true);}}
+  async function cacheVideo(){
+    if(!drama||cacheBusy||offline)return;
+    setCacheBusy(true);
+    try{
+      const cache=await caches.open('mujian-offline-v1');
+      if(!await cache.match(drama.videoUrl))await cache.add(drama.videoUrl);
+      await cache.add(drama.coverImg).catch(()=>undefined);
+      const item:DownloadedDrama={id:drama.id,title:drama.title,category:drama.category,coverImg:drama.coverImg,videoUrl:drama.videoUrl};
+      localStorage.setItem(DOWNLOADS_KEY,JSON.stringify([item,...readDownloads().filter(d=>d.id!==item.id)]));
+      window.dispatchEvent(new Event('downloads-changed'));
+      setOffline(true);toast('已保存到离线片库');
+    }catch{toast('缓存失败，请检查网络或浏览器存储空间',true);}
+    finally{setCacheBusy(false);}
+  }
   function close(){void saveProgress();onClose();}
-  return <Modal onClose={close} className="player-overlay" label="短剧播放"><div className="player-top"><span><Film size={17}/> 幕间放映室</span><div className="player-tools"><button className="icon-button" onClick={share} aria-label="分享短剧" title="分享短剧"><Share2 size={17}/></button><button className="icon-button" onClick={close} aria-label="关闭播放器"><X/></button></div></div>{error?<div className="empty"><AlertCircle/><p>{error}</p></div>:!drama?<div className="empty"><LoaderCircle className="spin"/>正在准备故事…</div>:<><div className="video-wrap"><video ref={videoRef} src={drama.videoUrl} poster={drama.coverImg} controls playsInline preload="metadata" onPlay={view} onPause={()=>void saveProgress()} onEnded={()=>void saveProgress()} onError={()=>setVideoError(true)}/>{videoError&&<p className="video-error" role="alert">视频暂时无法播放，请检查视频地址或网络后重试。</p>}</div><div className="player-info"><div className="player-heading"><div><span className="small-tag">{drama.category}</span><h2>{drama.title}</h2></div><div className="interaction"><button className={drama.liked?'secondary is-liked':'secondary'} disabled={busy} onClick={()=>interact('like')} aria-pressed={Boolean(drama.liked)}><Heart size={18} fill={drama.liked?'currentColor':'none'}/>{drama.liked?'已点赞':'点赞'} {count(drama.likeCount)}</button><button className={drama.favorited?'secondary is-liked':'secondary'} disabled={busy} onClick={()=>interact('favorite')} aria-pressed={Boolean(drama.favorited)}><Bookmark size={18} fill={drama.favorited?'currentColor':'none'}/>{drama.favorited?'已收藏':'收藏'}</button></div></div><p className="drama-description">{drama.description}</p><div className="player-actions"><button className="secondary" onClick={cacheVideo}><Download size={15}/>{offline?'已缓存':'离线缓存'}</button><button className="secondary" onClick={share}><Share2 size={15}/>分享</button>{user&&<span className="sync-note"><Wifi size={14}/>进度自动同步</span>}</div><section className="comments"><div className="comments-heading"><h3><MessageCircle size={16}/>剧友说 <span>{comments.length}</span></h3><span>最新评论</span></div><div className="comment-list">{comments.length?comments.map(c=><article className="comment" key={c.id}><span className="comment-avatar">{c.avatar||c.nickname.slice(0,1)}</span><div><strong>{c.nickname}</strong><time>{new Date(c.createTime).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</time><p>{c.content}</p></div></article>):<p className="comment-empty">还没有评论，来留下第一句观后感。</p>}</div><form className="comment-form" onSubmit={addComment}><input value={commentText} onChange={e=>setCommentText(e.target.value)} maxLength={500} placeholder={user?'说说你对这部短剧的感受…':'登录后参与评论'} /><button className="primary" disabled={commentBusy||!commentText.trim()}>{commentBusy?<LoaderCircle className="spin" size={15}/>:<MessageCircle size={15}/>}发布</button></form></section><div className="player-foot"><span><Eye size={15}/> {count(drama.viewCount)} 次播放 · 单集短片</span>{drama.videoUrl==='/media/sintel-trailer.mp4'&&<a href="https://www.sintel.org" target="_blank" rel="noreferrer">演示片源：Sintel · Blender Foundation · CC BY 3.0 <ArrowUpRight size={12}/></a>}</div></div></>}</Modal>;
+  return <Modal onClose={close} className="player-overlay" label="短剧播放">
+    <div className="player-top"><span><Film size={17}/> 幕间放映室</span><div className="player-tools"><button className="icon-button" onClick={share} aria-label="分享短剧" title="分享短剧"><Share2 size={17}/></button><button className="icon-button" onClick={close} aria-label="关闭播放器"><X/></button></div></div>
+    {error?<div className="empty"><AlertCircle/><p>{error}</p></div>:!drama?<div className="empty"><LoaderCircle className="spin"/>正在准备故事…</div>:<>
+      <div className="video-wrap"><video ref={videoRef} src={drama.videoUrl} poster={drama.coverImg} controls playsInline preload="metadata" onLoadedMetadata={restoreProgress} onPlay={view} onTimeUpdate={checkpoint} onPause={()=>void saveProgress()} onEnded={()=>void saveProgress()} onError={()=>setVideoError(true)}/>{videoError&&<p className="video-error" role="alert">视频暂时无法播放，请检查视频地址或网络后重试。</p>}</div>
+      <div className="player-info"><div className="player-heading"><div><span className="small-tag">{drama.category}</span><h2>{drama.title}</h2></div><div className="interaction"><button className={drama.liked?'secondary is-liked':'secondary'} disabled={busy} onClick={()=>interact('like')} aria-pressed={Boolean(drama.liked)}><Heart size={18} fill={drama.liked?'currentColor':'none'}/>{drama.liked?'已点赞':'点赞'} {count(drama.likeCount)}</button><button className={drama.favorited?'secondary is-liked':'secondary'} disabled={busy} onClick={()=>interact('favorite')} aria-pressed={Boolean(drama.favorited)}><Bookmark size={18} fill={drama.favorited?'currentColor':'none'}/>{drama.favorited?'已收藏':'收藏'}</button></div></div>
+        <p className="drama-description">{drama.description}</p>{restored>0&&<p className="resume-note"><History size={14}/> 已从 {Math.floor(restored/60)}:{String(restored%60).padStart(2,'0')} 继续播放</p>}
+        <div className="player-actions"><button className="secondary" disabled={cacheBusy||offline} onClick={cacheVideo}><Download size={15}/>{cacheBusy?'缓存中…':offline?'已缓存':'离线缓存'}</button><button className="secondary" onClick={share}><Share2 size={15}/>分享</button>{user&&<span className="sync-note"><Wifi size={14}/>进度自动同步</span>}</div>
+        <section className="comments"><div className="comments-heading"><h3><MessageCircle size={16}/>剧友说 <span>{comments.length}</span></h3><span>最新评论</span></div><div className="comment-list">{comments.length?comments.map(c=><article className="comment" key={c.id}><span className="comment-avatar">{c.avatar||c.nickname.slice(0,1)}</span><div><strong>{c.nickname}</strong><time>{new Date(c.createTime).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</time><p>{c.content}</p></div></article>):<p className="comment-empty">还没有评论，来留下第一句观后感。</p>}</div><form className="comment-form" onSubmit={addComment}><input value={commentText} onChange={e=>setCommentText(e.target.value)} maxLength={500} placeholder={user?'说说你对这部短剧的感受…':'登录后参与评论'} /><button className="primary" disabled={commentBusy||!commentText.trim()}>{commentBusy?<LoaderCircle className="spin" size={15}/>:<MessageCircle size={15}/>}发布</button></form></section>
+        <div className="player-foot"><span><Eye size={15}/> {count(drama.viewCount)} 次播放 · 单集短片</span>{drama.videoUrl==='/media/sintel-trailer.mp4'&&<a href="https://www.sintel.org" target="_blank" rel="noreferrer">演示片源：Sintel · Blender Foundation · CC BY 3.0 <ArrowUpRight size={12}/></a>}</div>
+      </div>
+    </>}
+  </Modal>;
+}
+
+function OfflineLibrary({items,toast,onNavigate}:{items:DownloadedDrama[];toast:(s:string,error?:boolean)=>void;onNavigate:(target:string)=>void}){
+  const [available,setAvailable]=useState<DownloadedDrama[]>([]),[selected,setSelected]=useState<DownloadedDrama|null>(null);
+  useEffect(()=>{
+    let active=true;
+    if(!('caches' in window)){setAvailable([]);return;}
+    caches.open('mujian-offline-v1').then(cache=>Promise.all(items.map(async item=>await cache.match(item.videoUrl)?item:null)))
+      .then(found=>{if(active)setAvailable(found.filter((item):item is DownloadedDrama=>item!==null));})
+      .catch(()=>{if(active)setAvailable([]);});
+    return()=>{active=false;};
+  },[items]);
+  async function remove(item:DownloadedDrama){
+    const remaining=readDownloads().filter(d=>d.id!==item.id);
+    try{
+      const cache=await caches.open('mujian-offline-v1');
+      if(!remaining.some(d=>d.videoUrl===item.videoUrl))await cache.delete(item.videoUrl);
+      if(!remaining.some(d=>d.coverImg===item.coverImg))await cache.delete(item.coverImg);
+      localStorage.setItem(DOWNLOADS_KEY,JSON.stringify(remaining));
+      setAvailable(current=>current.filter(d=>d.id!==item.id));
+      window.dispatchEvent(new Event('downloads-changed'));
+      toast('已从离线片库移除');
+    }catch{toast('暂时无法移除，请重试',true);}
+  }
+  return <div className="offline-library"><div className="page-intro"><div><p className="eyebrow">YOUR OFFLINE LIBRARY</p><h1>离线片库</h1></div><span className="offline-total">{available.length} 部已保存</span></div>
+    {!available.length?<div className="empty"><Download size={34}/><h2>还没有缓存的视频</h2><p>在播放器点“离线缓存”，已保存的短剧会出现在这里。</p><button className="primary" onClick={()=>onNavigate('home')}>发现好剧</button></div>:<div className="drama-grid">{available.map(item=><div className="drama-item" key={item.id}><button className="drama-card" onClick={()=>setSelected(item)} aria-label={`离线播放${item.title}`}><div className="poster"><img src={item.coverImg} alt={item.title+'封面'}/><div className="poster-overlay"/><span className="poster-tag">{item.category}</span><span className="poster-title">{item.title}</span><span className="poster-subtitle">幕间 · 已缓存</span><span className="play-hover"><Play size={23} fill="currentColor"/></span><span className="poster-bottom"><Download size={12}/> 可离线播放</span></div><div className="card-title"><h3>{item.title}</h3><ArrowUpRight size={16}/></div></button><button className="history-remove icon-button" aria-label={`移除${item.title}的离线缓存`} title="移除离线缓存" onClick={()=>void remove(item)}><Trash2 size={15}/></button></div>)}</div>}
+    {selected&&<Modal onClose={()=>setSelected(null)} className="player-overlay" label="离线播放"><div className="player-top"><span><Download size={17}/> 离线放映室</span><button className="icon-button" onClick={()=>setSelected(null)} aria-label="关闭离线播放"><X/></button></div><div className="video-wrap"><video src={selected.videoUrl} poster={selected.coverImg} controls playsInline autoPlay preload="metadata"/></div><div className="offline-player-info"><span className="small-tag">{selected.category}</span><h2>{selected.title}</h2><p>离线播放仅使用本机缓存；互动和同步需要网络连接。</p></div></Modal>}
+  </div>;
 }
 
 function Profile({user,onLogin,onNavigate,onInstall}:{user:User|null;onLogin:()=>void;onNavigate:(target:string)=>void;onInstall:()=>void}){
-  const [history,setHistory]=useState<Drama[]>([]),[online,setOnline]=useState(navigator.onLine);
-  useEffect(()=>{const set=()=>setOnline(navigator.onLine);window.addEventListener('online',set);window.addEventListener('offline',set);if(user)api<Drama[]>('/me/history').then(setHistory).catch(()=>{});return()=>{window.removeEventListener('online',set);window.removeEventListener('offline',set);};},[user]);
+  const [history,setHistory]=useState<Drama[]>([]),[dramaCount,setDramaCount]=useState(0),[online,setOnline]=useState(navigator.onLine);
+  useEffect(()=>{const set=()=>setOnline(navigator.onLine);window.addEventListener('online',set);window.addEventListener('offline',set);if(user){api<Drama[]>('/me/history').then(setHistory).catch(()=>{});api<Drama[]>('/dramas').then(items=>setDramaCount(items.length)).catch(()=>{});}return()=>{window.removeEventListener('online',set);window.removeEventListener('offline',set);};},[user]);
   if(!user)return <div className="profile-empty empty"><UserRound size={42}/><h2>登录你的幕间 App</h2><p>同步收藏、观看进度和评论，换设备也能接着看。</p><button className="primary" onClick={onLogin}>登录 / 注册</button></div>;
-  return <div className="profile-page"><div className="profile-hero"><span className="profile-avatar">{user.nickname.slice(0,1)}</span><div><p className="eyebrow">YOUR STORY SPACE</p><h1>{user.nickname}<span> 的幕间</span></h1><p className="profile-handle">@{user.username} · {online?'已连接':'离线模式'}</p></div></div><div className="profile-stats"><div><strong>{history.length}</strong><span>观看记录</span></div><div><strong>8</strong><span>精选短剧</span></div><div><strong>App</strong><span>独立体验</span></div></div><div className="profile-grid"><button className="profile-card" onClick={()=>onNavigate('history')}><History size={21}/><span><strong>继续观看</strong><small>{history.length?'从上次停下的地方继续':'播放一部短剧后自动记录'}</small></span><ChevronRight size={17}/></button><button className="profile-card" onClick={()=>onNavigate('favorites')}><Bookmark size={21}/><span><strong>我的收藏</strong><small>把值得重看的故事放在一起</small></span><ChevronRight size={17}/></button><button className="profile-card" onClick={onInstall}><Smartphone size={21}/><span><strong>安装幕间 App</strong><small>添加到桌面，打开更快更沉浸</small></span><Download size={17}/></button><div className="profile-card static"><Wifi size={21}/><span><strong>进度云同步</strong><small>播放暂停时自动保存观看位置</small></span><span className="status-dot"/></div></div><div className="profile-innovation"><Sparkles size={19}/><div><strong>幕间创新：心情选剧</strong><p>不想搜索时，让 App 根据当前片库随机挑一部，减少选择疲劳。</p></div><button className="secondary" onClick={()=>onNavigate('home')}>去试试</button></div></div>;
+  return <div className="profile-page"><div className="profile-hero"><span className="profile-avatar">{user.nickname.slice(0,1)}</span><div><p className="eyebrow">YOUR STORY SPACE</p><h1>{user.nickname}<span> 的幕间</span></h1><p className="profile-handle">@{user.username} · {online?'已连接':'离线模式'}</p></div></div><div className="profile-stats"><div><strong>{history.length}</strong><span>观看记录</span></div><div><strong>{dramaCount}</strong><span>在架短剧</span></div><div><strong>App</strong><span>独立体验</span></div></div><div className="profile-grid"><button className="profile-card" onClick={()=>onNavigate('history')}><History size={21}/><span><strong>继续观看</strong><small>{history.length?'从上次停下的地方继续':'播放一部短剧后自动记录'}</small></span><ChevronRight size={17}/></button><button className="profile-card" onClick={()=>onNavigate('favorites')}><Bookmark size={21}/><span><strong>我的收藏</strong><small>把值得重看的故事放在一起</small></span><ChevronRight size={17}/></button><button className="profile-card" onClick={onInstall}><Smartphone size={21}/><span><strong>安装幕间 App</strong><small>添加到桌面，打开更快更沉浸</small></span><Download size={17}/></button><div className="profile-card static"><Wifi size={21}/><span><strong>进度云同步</strong><small>播放中定期保存观看位置</small></span><span className="status-dot"/></div></div><div className="profile-innovation"><Sparkles size={19}/><div><strong>幕间创新：心情选剧</strong><p>不想搜索时，让 App 根据当前片库随机挑一部，减少选择疲劳。</p></div><button className="secondary" onClick={()=>onNavigate('home')}>去试试</button></div></div>;
 }
 
 function Admin({user,toast,onLogin,onView,onChange}:{user:User|null;toast:(s:string,error?:boolean)=>void;onLogin:()=>void;onView:(id:number)=>void;onChange:()=>void}){

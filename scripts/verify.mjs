@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-const base='http://127.0.0.1:8080';
+const base=process.env.APP_URL || 'http://127.0.0.1:8080';
 let passed=0;
-async function request(path,method='GET',body,token){const r=await fetch(base+'/api'+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};}
+async function request(path,method='GET',body,token){const r=await fetch(base+'/api'+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,data:r.status===204?null:await r.json()};}
 function check(name,condition){assert.ok(condition,name);passed++;console.log(`PASS ${passed}: ${name}`);}
 const health=await request('/health');check('真实数据库连接',health.status===200&&health.data.database==='connected');
 const list=await request('/dramas');check('公开内容列表',list.status===200&&list.data.length>=8);
@@ -41,7 +41,9 @@ try {
   const commentsOpen=await request(`/dramas/${id}/comments`);check('匿名可查看剧友评论',commentsOpen.status===200&&Array.isArray(commentsOpen.data));
   const comment=await request(`/dramas/${id}/comments`,'POST',{content:'验收评论：节奏很舒服。'},token);check('登录用户发表评论',comment.status===201&&comment.data.content.includes('节奏'));
   const progress=await request(`/dramas/${id}/progress`,'PUT',{progressSec:12,durationSec:60},token);check('观看进度同步',progress.status===200&&progress.data.progressSec===12);
+  const resumed=await request('/dramas/'+id,'GET',undefined,token);check('详情返回上次观看位置',resumed.status===200&&resumed.data.progressSec===12&&resumed.data.durationSec===60);
   const history=await request('/me/history','GET',undefined,token);check('继续观看历史',history.status===200&&history.data.some(d=>d.id===id&&d.progressSec===12));
+  const removed=await request(`/me/history/${id}`,'DELETE',undefined,token);check('用户可移除观看记录',removed.status===204&&!(await request('/me/history','GET',undefined,token)).data.some(d=>d.id===id));
   const search=await request('/dramas?q='+encodeURIComponent('验收已更新'));check('搜索短剧',search.data.some(d=>d.id===id));
 } finally {
   const deleted=await request('/admin/dramas/'+id,'DELETE',undefined,adminToken);check('管理员删除',deleted.status===200);
@@ -51,5 +53,5 @@ const remaining=await request('/me/favorites','GET',undefined,token);check('删�
 const video=await fetch(base+'/media/sintel-trailer.mp4',{headers:{Range:'bytes=0-1023'}});check('本地视频支持拖动播放',video.status===206&&(await video.arrayBuffer()).byteLength===1024);
 const home=await fetch(base+'/');check('前端已集成到Java服务',home.status===200&&(await home.text()).includes('幕间'));
 const manifest=await fetch(base+'/manifest.webmanifest');check('App安装清单可访问',manifest.status===200&&(await manifest.text()).includes('standalone'));
-const worker=await fetch(base+'/sw.js');check('App离线缓存脚本可访问',worker.status===200&&(await worker.text()).includes('mujian-app-v1'));
+const worker=await fetch(base+'/sw.js');check('App离线缓存脚本可访问',worker.status===200&&(await worker.text()).includes('asset-manifest.json'));
 console.log(`\n${passed} checks passed. Temporary user: ${username}`);

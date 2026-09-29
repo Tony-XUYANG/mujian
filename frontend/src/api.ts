@@ -8,7 +8,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const response = await fetch('/api'+path, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers } });
   const data = await response.json().catch(() => ({ message: '服务响应异常，请稍后重试' }));
   if (!response.ok) {
-    if(response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/register')) {
+    if(response.status === 401 && token && token === sessionStorage.getItem('mujian_token') && !path.startsWith('/auth/login') && !path.startsWith('/auth/register')) {
       sessionStorage.removeItem('mujian_token'); window.dispatchEvent(new Event('session-expired'));
     }
     throw new ApiError(response.status, data.message || '请求失败，请稍后重试');

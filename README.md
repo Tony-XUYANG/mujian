@@ -1,6 +1,6 @@
 # 幕间 · 可安装短剧 App
 
-幕间是一个“红果短剧核心体验 + 轻量创新”的可运行短剧 App 演示项目。用户可以发现短剧、搜索和分类筛选、打开播放器、点赞收藏、发表评论、保存观看进度，并从“继续观看”回到上次停下的位置；管理员可以在内容管理后台维护短剧和查看基础统计。
+幕间是一个参考红果短剧核心路径的可运行短剧 App 演示项目。用户可以发现短剧、搜索和分类筛选、播放、点赞收藏、发表评论、分享短剧链接，并从“继续观看”恢复上次位置；离线片库允许手动保存后断网播放。管理员可以在内容管理后台维护短剧和查看基础统计。
 
 项目把纸面上的 Spring Boot + React + MySQL 方案落成了完整的前后端应用，并用 PWA 交付可安装的 App 体验：手机浏览器可以将幕间添加到桌面，以独立窗口打开，移动端使用底部导航，已缓存内容可以在网络不稳定时继续使用。
 
@@ -14,13 +14,21 @@
 | 纸面要求 | 短剧列表、详情、视频播放 | 已完成 | 精选首屏、短剧网格、播放器、视频拖动播放 |
 | 纸面要求 | 点赞、收藏、防重复 | 已完成 | 播放器互动按钮；联合唯一约束和并发验收 |
 | 纸面要求 | 管理员短剧 CRUD | 已完成 | “内容管理”后台、实时统计、增删改查表单 |
-| 红果核心 | 推荐首页、分类、搜索 | 已完成 | “发现好剧”首页、分类标签、标题搜索 |
+| 红果核心 | 精选首页、分类、搜索 | 已完成基础版 | “发现好剧”、分类标签、标题搜索；尚无个性化推荐算法 |
 | 红果核心 | 热播榜单 | 已完成 | “人气榜单”按播放量排序并显示名次 |
-| 红果核心 | 播放进度、回访 | 已完成 | “继续观看”、进度百分比、云端进度同步 |
+| 红果核心 | 播放进度、回访 | 已完成 | “继续观看”、详情自动续播、播放中定期同步 |
 | 红果核心 | 评论互动 | 已完成 | 播放器“剧友说”评论列表和发表评论 |
-| App 化 | 移动端、安装、离线 | 已完成 | PWA manifest、Service Worker、移动端底部导航、离线缓存入口 |
+| App 化 | 移动端、安装、离线 | 已完成 PWA 演示 | 移动端底部导航、App 壳预缓存、离线片库和断网视频拖动 |
 | 幕间创新 | 降低选择疲劳 | 已完成 | “心情选剧”从当前片库随机挑选并直接打开播放器 |
-| 后续能力 | 分集连播、付费、推荐算法 | 规划中 | 当前明确标注边界，没有用演示代码假装已完成 |
+| 红果差距 | 单列推荐、任意选集、预约、小窗、倍速、会员 | 未完成 | 见竞品对照与后续需求，不作为当前交付宣传 |
+
+![发现首页实际截图](docs/screenshots/desktop-home.jpg)
+
+| 播放与续播 | 离线片库 | 管理后台 |
+| --- | --- | --- |
+| ![播放器](docs/screenshots/desktop-player.jpg) | ![离线片库](docs/screenshots/offline-library.jpg) | ![管理后台](docs/screenshots/desktop-admin.jpg) |
+
+手机端：[390px 首页](docs/screenshots/mobile-390-home.jpg) · [320px 首页](docs/screenshots/mobile-320-home.jpg) · [离线播放](docs/screenshots/offline-player.jpg)。截图由真实浏览器验收脚本生成，文档中对应的是可运行页面。
 
 ## 页面效果
 
@@ -34,13 +42,14 @@
 ### 播放器
 
 - 弹层播放器支持视频播放、拖动、播放计数、点赞/取消点赞和收藏/取消收藏。
-- 进度在暂停或结束时自动保存；登录用户可以看到“进度自动同步”。
-- 下方有分享、离线缓存、版权演示片源说明和“剧友说”评论区。
+- 登录用户的进度在播放中约每 15 秒及暂停、结束、关闭时同步；重新打开自动定位到上次位置。
+- 分享生成 `/#watch/{id}` 直达链接；下方有离线缓存、版权演示片源说明和“剧友说”评论区。
 - 游客可以查看评论；登录后可以发布最多 500 字评论。
 
 ### 继续观看和我的
 
-- “继续观看”按最近观看时间展示历史，卡片显示进度百分比，点击后回到播放器。
+- “继续观看”按最近观看时间展示历史，卡片显示进度百分比，点击后从保存位置播放，可单条移除。
+- 顶栏下载入口打开离线片库；断网重启后，已缓存视频仍可播放和拖动，可按条目移除。
 - “我的”展示账号、在线/离线状态、观看记录、收藏、安装 App、同步状态和心情选剧说明。
 - 手机端导航固定在底部，内容区为单列/双列自适应布局，播放器按钮会自动换行。
 
@@ -87,7 +96,7 @@
 | App 体验 | Web App Manifest、Service Worker、Cache Storage | `frontend/public`、`frontend/index.html` |
 | 后端 | Java 21、Spring Boot 3.5.6、Spring Security | `backend/src/main/java` |
 | 数据库 | MySQL 8.4、JdbcTemplate、参数化 SQL | `backend/src/main/resources/schema.sql` |
-| 验收 | PowerShell 构建脚本、Node.js HTTP 验收脚本 | `scripts` |
+| 验收 | Linux/Windows 构建脚本、HTTP、Service Worker 与浏览器验收 | `scripts` |
 | 文档 | 产品需求、竞品分析、技术架构和实现映射 | `docs` |
 
 核心后端文件：
@@ -114,7 +123,19 @@
 
 项目路径：`E:\mujian`
 
-### 快速运行
+### Linux / WSL
+
+需要 Node.js 20+、Java 21、Maven 3.9+ 和已启动的 MySQL 8；默认数据库地址是 `127.0.0.1:3307/mujian`。先创建数据库和有建表权限的用户（可通过 `DB_URL`、`DB_USER`、`DB_PASSWORD` 覆盖默认值），然后运行：
+
+```bash
+cd /mnt/e/mujian
+bash scripts/build.sh
+bash scripts/start.sh
+```
+
+启动后访问 [http://127.0.0.1:8080](http://127.0.0.1:8080)，验收可运行 `node scripts/verify.mjs` 和 `node scripts/verify-sw.mjs`。WSL 与 Windows 默认可能不共享 `127.0.0.1` 网络；若 MySQL 在 Windows 侧，需按实际网络设置 `DB_URL`。Linux 脚本不自动安装或启动 MySQL。
+
+### Windows 本地演示
 
 双击 `start.cmd`，或在 PowerShell 执行：
 
@@ -145,7 +166,7 @@ cd E:\mujian
 2. 搜索“雨停”或切换“悬疑”，打开播放器并播放几秒。
 3. 以 `demo` 登录，点击点赞、收藏，发布一句评论，暂停视频。
 4. 打开“继续观看”，展示进度百分比；打开“我的”，展示 App 安装入口和同步状态。
-5. 回到发现页，展示榜单和收藏列表；在播放器点“离线缓存”。
+5. 回到发现页，展示榜单和收藏列表；在播放器点“离线缓存”，再打开离线片库。
 6. 退出后以 `admin` 登录，打开“内容管理”，展示实时统计和 CRUD 表单。
 7. 新增或编辑短剧，回到发现页确认内容同步；删除测试记录后确认前台消失。
 8. 介绍数据库联合唯一约束、权限校验、PWA 方案和 Codex 的分块开发流程。
@@ -154,14 +175,16 @@ cd E:\mujian
 
 执行：
 
-```powershell
-cd E:\mujian
-.\scripts\build.ps1
-.\scripts\start.ps1
-node scripts\verify.mjs
+```bash
+cd /mnt/e/mujian
+bash scripts/build.sh
+bash scripts/start.sh
+node scripts/verify.mjs
+node scripts/verify-sw.mjs
+# 有 Chromium/Edge 与 Playwright 时：node scripts/verify-ui.mjs
 ```
 
-当前自动验收结果：**34 checks passed**。
+当前自动 HTTP 验收结果：**36 checks passed**。Service Worker 缓存/Range 检查和真实浏览器流程均通过，详细记录见 [本轮验收记录](docs/08-本轮验收记录.md)，实际页面截图见 `docs/screenshots/`。
 
 覆盖范围包括：
 
@@ -171,14 +194,14 @@ node scripts\verify.mjs
 - 不安全资源地址拒绝、点赞/收藏重复和并发幂等。
 - 重新登录后的数据持久化、收藏列表和级联清理。
 - 视频 Range 拖动播放。
-- 匿名查看评论、登录发表评论、观看进度同步和继续观看历史。
-- PWA manifest 和 Service Worker 可访问。
+- 匿名查看评论、登录发表评论、详情续播数据和观看历史删除。
+- PWA manifest、App 壳资源清单、Service Worker、离线媒体 Range 和浏览器端断网流程。
 
 构建验证：
 
 - `npm run build`：通过。
-- `mvn -q -DskipTests package`：通过。
-- `git diff --check`：通过后提交。
+- Linux `mvn -B -ntp package`：通过；当前无 Java 单元测试，接口行为由 HTTP 验收覆盖。
+- `git diff --check`：通过。
 
 ## 文档导航
 
@@ -191,6 +214,7 @@ node scripts\verify.mjs
 | `docs/05-增强后总需求.md` | 竞品核心能力 + 幕间创新后的总 PRD |
 | `docs/06-增强后总技术架构.md` | 总体架构、演进、原生 App 路线和运维 |
 | `docs/07-需求实现映射与演示效果.md` | 一眼查看需求、代码位置、页面效果和验收证据 |
+| `docs/08-本轮验收记录.md` | 本轮改进、验证结果、截图和运行环境 |
 
 ## 当前边界
 

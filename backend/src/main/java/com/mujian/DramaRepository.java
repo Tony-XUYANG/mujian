@@ -33,7 +33,15 @@ public class DramaRepository {
     public Map<String,Object> detail(long id,Long userId) {
         var rows = db.queryForList(SELECT+" WHERE d.id=?",userId,userId,id);
         if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"这部短剧不存在或已下架");
-        return rows.getFirst();
+        var drama = rows.getFirst();
+        if (userId != null) {
+            var progress = db.queryForList("""
+                SELECT progress_sec AS progressSec, duration_sec AS durationSec
+                FROM watch_history WHERE user_id=? AND drama_id=?
+                """, userId, id);
+            if (!progress.isEmpty()) drama.putAll(progress.getFirst());
+        }
+        return drama;
     }
     public void require(long id) {
         if (db.queryForObject("SELECT COUNT(*) FROM drama WHERE id=?",Integer.class,id)==0)
