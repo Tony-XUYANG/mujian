@@ -7,7 +7,7 @@ function check(name,condition){assert.ok(condition,name);passed++;console.log(`P
 const health=await request('/health');check('真实数据库连接',health.status===200&&health.data.database==='connected');
 const list=await request('/dramas');check('公开内容列表',list.status===200&&list.data.length>=8);
 const bad=await request('/auth/login','POST',{username:'admin',password:'wrong'});check('错误密码拒绝登录',bad.status===401);
-const username='verify_'+Date.now().toString(36);
+const username='验收_'+Date.now().toString(36);
 const signup=await request('/auth/register','POST',{username,password:'Verify123!',nickname:'自动验收',role:'ADMIN'});check('用户注册且不能自选管理员',signup.status===201&&signup.data.user.role==='USER');
 const token=signup.data.token;
 const duplicate=await request('/auth/register','POST',{username,password:'Verify123!',nickname:'重复'});check('用户名唯一约束',duplicate.status===409);

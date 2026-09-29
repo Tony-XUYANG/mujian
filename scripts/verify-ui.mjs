@@ -15,7 +15,7 @@ const failures = [];
 page.on('pageerror', error => failures.push(error.message));
 
 try {
-  const username = 'ui_' + Date.now().toString(36);
+  const username = '界面验收' + Date.now().toString(36);
   const password = 'UiVerify123!';
   const signup = await context.request.post(base + '/api/auth/register', { data: { username, password, nickname: '界面验收' } });
   assert.equal(signup.status(), 201);

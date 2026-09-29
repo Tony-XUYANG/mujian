@@ -26,7 +26,8 @@ public class AuthController {
     }
     public record Login(@NotBlank(message="请输入用户名") String username, @NotBlank(message="请输入密码") String password) {}
     public record Register(
-        @Pattern(regexp="[A-Za-z0-9_]{3,24}", message="用户名需为3–24位字母、数字或下划线") @NotNull String username,
+        @NotBlank(message="请输入用户名")
+        @Pattern(regexp="[\\p{IsHan}A-Za-z0-9_]{2,24}", message="用户名需为2–24位中文、字母、数字或下划线") String username,
         @Size(min=8,max=64,message="密码长度需为8–64位") @NotNull String password,
         @NotBlank(message="请输入昵称") @Size(max=30,message="昵称最多30字") String nickname) {}
 
