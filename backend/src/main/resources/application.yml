@@ -14,9 +14,14 @@ spring:
     init:
       mode: always
       encoding: UTF-8
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   jackson:
     time-zone: Asia/Shanghai
 app:
+  upload-dir: ${UPLOAD_DIR:uploads}
   jwt-secret: ${JWT_SECRET:local-demo-only-mujian-secret-change-before-deploy-2026}
   seed-demo: ${SEED_DEMO:true}
   admin-password: ${ADMIN_PASSWORD:Admin123!}

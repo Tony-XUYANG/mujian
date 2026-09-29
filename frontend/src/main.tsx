@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Play, Search, Bookmark, Compass, Flame, ArrowUpRight, Heart, X, LogOut, ChevronRight, Film, Plus, Pencil, Trash2, LayoutDashboard, Users, Eye, Check, LoaderCircle, CheckCircle2, AlertCircle, SlidersHorizontal, History, UserRound, Share2, MessageCircle, Download, Sparkles, Clock3, Wifi, Smartphone } from 'lucide-react';
+import { Play, Search, Bookmark, Compass, Flame, ArrowUpRight, Heart, X, LogOut, ChevronRight, Film, Plus, Pencil, Trash2, LayoutDashboard, Users, Eye, Check, LoaderCircle, CheckCircle2, AlertCircle, SlidersHorizontal, History, UserRound, Share2, MessageCircle, Download, Sparkles, Clock3, Wifi, Camera } from 'lucide-react';
 import { api, count, type Comment, type Drama, type DramaInput, type User } from './api';
 import './style.css';
 
@@ -98,10 +98,10 @@ function App() {
       <header className="topbar"><span className="top-location">{route==='admin'?'创作者工作台':route==='favorites'?'我的片单':route==='popular'?'人气榜单':route==='history'?'继续观看':route==='profile'?'个人中心':'发现'}<ChevronRight size={14}/><span>{route==='admin'?'内容管理':route==='profile'?'幕间 App':'幕间短剧'}</span></span>
         {isLibrary&&<div className="search-box"><Search size={17}/><input aria-label="搜索短剧" placeholder="搜索一部好故事…" value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button className="icon-button" aria-label="清空搜索" onClick={()=>setQuery('')}><X size={14}/></button>}</div>}
         <button className="icon-button offline-entry" onClick={()=>navigate('offline')} aria-label="打开离线片库" title={`离线片库 · ${downloads.length} 部`}><Download size={18}/>{downloads.length>0&&<span className="offline-count">{downloads.length}</span>}</button>
-        <div className="account">{user?<><span className="avatar">{user.nickname.slice(0,1)}</span><span className="nickname">{user.nickname}</span><button className="icon-button" onClick={logout} aria-label="退出登录" title="退出登录"><LogOut size={17}/></button></>:<button className="login-button" onClick={()=>setAuth(true)}>登录 / 注册<ArrowUpRight size={15}/></button>}</div>
+        <div className="account">{user?<><span className="avatar">{user.avatarUrl?<img src={user.avatarUrl} alt=""/>:user.nickname.slice(0,1)}</span><span className="nickname">{user.nickname}</span><button className="icon-button" onClick={logout} aria-label="退出登录" title="退出登录"><LogOut size={17}/></button></>:<button className="login-button" onClick={()=>setAuth(true)}>登录 / 注册<ArrowUpRight size={15}/></button>}</div>
       </header>
       <main>
-        {route==='admin'?<Admin user={user} toast={toast} onLogin={()=>setAuth(true)} onView={setSelected} onChange={reload}/>:route==='offline'?<OfflineLibrary items={downloads} toast={toast} onNavigate={navigate}/>:route==='profile'?<Profile user={user} onLogin={()=>setAuth(true)} onNavigate={navigate} onInstall={install}/>:<>
+        {route==='admin'?<Admin user={user} toast={toast} onLogin={()=>setAuth(true)} onView={setSelected} onChange={reload}/>:route==='offline'?<OfflineLibrary items={downloads} toast={toast} onNavigate={navigate}/>:route==='profile'?<Profile user={user} onLogin={()=>setAuth(true)} onNavigate={navigate} onView={setSelected} onUserUpdated={setUser} toast={toast} refresh={refresh}/>:<>
           {isHome&&!search&&category==='全部'&&<div className="page-intro"><div><p className="eyebrow">A LITTLE BREAK. A GREAT STORY.</p><h1>好故事，<span>随时入戏。</span></h1></div><div className="intro-actions"><button className="secondary mood-button" onClick={()=>{if(!dramas.length)return;setSelected(dramas[Math.floor(Math.random()*dramas.length)].id);}}><Sparkles size={15}/>心情选剧</button><span className="edition"><span/> 即刻开启你的观剧时光</span></div></div>}
           {isHome&&!search&&category==='全部'&&featured&&!loading&&<section className="hero" style={{backgroundImage:`url("${featured.coverImg}")`}} aria-label="今日精选">
             <div className="hero-shade"/><div className="hero-content"><div className="hero-label"><span/> 幕间精选 <span className="label-sep">/</span> EDITOR'S PICK</div><h2>{featured.title}</h2><p className="hero-subtitle">在故事里，遇见另一种人生。</p><p className="hero-description">{featured.description}</p><div className="hero-meta"><span>{featured.category}</span><span>精选短片</span><span>免费观赏</span></div><button className="primary hero-play" onClick={()=>setSelected(featured.id)}><Play size={17} fill="currentColor"/>立即观看<ChevronRight size={16}/></button></div><div className="hero-index"><span>01</span> / {String(dramas.length).padStart(2,'0')}<div className="hero-progress"><i/></div></div><div className="hero-vertical">LET THE STORY BEGIN</div>
@@ -249,11 +249,65 @@ function OfflineLibrary({items,toast,onNavigate}:{items:DownloadedDrama[];toast:
   </div>;
 }
 
-function Profile({user,onLogin,onNavigate,onInstall}:{user:User|null;onLogin:()=>void;onNavigate:(target:string)=>void;onInstall:()=>void}){
-  const [history,setHistory]=useState<Drama[]>([]),[dramaCount,setDramaCount]=useState(0),[online,setOnline]=useState(navigator.onLine);
-  useEffect(()=>{const set=()=>setOnline(navigator.onLine);window.addEventListener('online',set);window.addEventListener('offline',set);if(user){api<Drama[]>('/me/history').then(setHistory).catch(()=>{});api<Drama[]>('/dramas').then(items=>setDramaCount(items.length)).catch(()=>{});}return()=>{window.removeEventListener('online',set);window.removeEventListener('offline',set);};},[user]);
-  if(!user)return <div className="profile-empty empty"><UserRound size={42}/><h2>登录你的幕间 App</h2><p>同步收藏、观看进度和评论，换设备也能接着看。</p><button className="primary" onClick={onLogin}>登录 / 注册</button></div>;
-  return <div className="profile-page"><div className="profile-hero"><span className="profile-avatar">{user.nickname.slice(0,1)}</span><div><p className="eyebrow">YOUR STORY SPACE</p><h1>{user.nickname}<span> 的幕间</span></h1><p className="profile-handle">@{user.username} · {online?'已连接':'离线模式'}</p></div></div><div className="profile-stats"><div><strong>{history.length}</strong><span>观看记录</span></div><div><strong>{dramaCount}</strong><span>在架短剧</span></div><div><strong>App</strong><span>独立体验</span></div></div><div className="profile-grid"><button className="profile-card" onClick={()=>onNavigate('history')}><History size={21}/><span><strong>继续观看</strong><small>{history.length?'从上次停下的地方继续':'播放一部短剧后自动记录'}</small></span><ChevronRight size={17}/></button><button className="profile-card" onClick={()=>onNavigate('favorites')}><Bookmark size={21}/><span><strong>我的收藏</strong><small>把值得重看的故事放在一起</small></span><ChevronRight size={17}/></button><button className="profile-card" onClick={onInstall}><Smartphone size={21}/><span><strong>安装幕间 App</strong><small>添加到桌面，打开更快更沉浸</small></span><Download size={17}/></button><div className="profile-card static"><Wifi size={21}/><span><strong>进度云同步</strong><small>播放中定期保存观看位置</small></span><span className="status-dot"/></div></div><div className="profile-innovation"><Sparkles size={19}/><div><strong>幕间创新：心情选剧</strong><p>不想搜索时，让 App 根据当前片库随机挑一部，减少选择疲劳。</p></div><button className="secondary" onClick={()=>onNavigate('home')}>去试试</button></div></div>;
+function Profile({user,onLogin,onNavigate,onView,onUserUpdated,toast,refresh}:{user:User|null;onLogin:()=>void;onNavigate:(target:string)=>void;onView:(id:number)=>void;onUserUpdated:(user:User)=>void;toast:(text:string,error?:boolean)=>void;refresh:number}){
+  const [history,setHistory]=useState<Drama[]>([]);
+  const [favorites,setFavorites]=useState<Drama[]>([]);
+  const [tab,setTab]=useState<'history'|'favorites'>('history');
+  const [online,setOnline]=useState(navigator.onLine);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState('');
+  const [retry,setRetry]=useState(0);
+  const [uploading,setUploading]=useState<'avatar'|'background'|null>(null);
+  const avatarInput=useRef<HTMLInputElement>(null);
+  const backgroundInput=useRef<HTMLInputElement>(null);
+  useEffect(()=>{
+    const updateOnline=()=>setOnline(navigator.onLine);
+    window.addEventListener('online',updateOnline);
+    window.addEventListener('offline',updateOnline);
+    if(!user){setLoading(false);return()=>{window.removeEventListener('online',updateOnline);window.removeEventListener('offline',updateOnline);};}
+    let active=true;
+    setLoading(true);setError('');
+    Promise.all([api<Drama[]>('/me/history'),api<Drama[]>('/me/favorites')])
+      .then(([watched,saved])=>{if(active){setHistory(watched);setFavorites(saved);}})
+      .catch(e=>{if(active)setError((e as Error).message);})
+      .finally(()=>{if(active)setLoading(false);});
+    return()=>{active=false;window.removeEventListener('online',updateOnline);window.removeEventListener('offline',updateOnline);};
+  },[user?.id,refresh,retry]);
+  async function upload(kind:'avatar'|'background',file?:File){
+    if(!user||!file)return;
+    if(file.size>5_000_000){toast('请选择不超过5MB的图片',true);return;}
+    if(!file.type.startsWith('image/')){toast('请选择图片文件',true);return;}
+    setUploading(kind);
+    try{
+      const data=new FormData();data.append('file',file);
+      const result=await api<{url:string}>(`/auth/profile/${kind}`,{method:'POST',body:data});
+      onUserUpdated({...user,[kind==='avatar'?'avatarUrl':'backgroundUrl']:result.url});
+      toast(kind==='avatar'?'头像已更新':'主页背景已更新');
+    }catch(e){toast((e as Error).message,true);}
+    finally{setUploading(null);}
+  }
+  if(!user)return <div className="profile-empty empty"><UserRound size={42}/><h2>登录你的幕间 App</h2><p>登录后收藏短剧，播放进度也会自动记住。</p><button className="primary" onClick={onLogin}>登录 / 注册</button></div>;
+  const visible=tab==='history'?history:favorites;
+  const cover=user.backgroundUrl||favorites[0]?.coverImg||history[0]?.coverImg||'/media/forest.jpg';
+  return <div className="profile-page profile-shell">
+    <input className="profile-file-input" ref={avatarInput} type="file" accept="image/*" aria-label="选择头像图片" onChange={e=>{void upload('avatar',e.target.files?.[0]);e.target.value='';}}/>
+    <input className="profile-file-input" ref={backgroundInput} type="file" accept="image/*" aria-label="选择背景图片" onChange={e=>{void upload('background',e.target.files?.[0]);e.target.value='';}}/>
+    <section className="profile-cover" style={{backgroundImage:`url("${cover}")`}}>
+      <div className="profile-cover-shade"/>
+      <div className="profile-cover-bar"><span>我的主页</span><span className="profile-live-dot">{online?'在线':'离线'}</span></div>
+      <button className="profile-change-cover" disabled={uploading!==null} onClick={()=>backgroundInput.current?.click()} title="更换主页背景"><Camera size={15}/>{uploading==='background'?'上传中…':'更换背景'}</button>
+    </section>
+    <section className="profile-user">
+      <button className="profile-avatar-xl" disabled={uploading!==null} onClick={()=>avatarInput.current?.click()} aria-label="更换头像" title="更换头像">{user.avatarUrl?<img src={user.avatarUrl} alt=""/>:user.nickname.slice(0,1)}<span><Camera size={16}/></span></button>
+      <div className="profile-identity"><h1>{user.nickname}</h1><p>@{user.username}</p><span>{uploading==='avatar'?'头像上传中…':online?'正在使用幕间':'当前处于离线模式'}</span></div>
+    </section>
+    <div className="profile-stats"><button className={tab==='favorites'?'profile-stat active':'profile-stat'} onClick={()=>setTab('favorites')}><strong>{favorites.length}</strong><span>我的收藏</span></button><button className={tab==='history'?'profile-stat active':'profile-stat'} onClick={()=>setTab('history')}><strong>{history.length}</strong><span>观看记录</span></button></div>
+    <section className="profile-library">
+      <div className="profile-library-heading"><div><p className="eyebrow">你的故事</p><h2>{tab==='history'?'继续观看':'我的收藏'}<span className="total">{visible.length} 部</span></h2></div><button className="profile-discover" onClick={()=>onNavigate('home')}><Compass size={15}/>发现好剧</button></div>
+      <div className="profile-tabs" role="tablist" aria-label="个人片单"><button role="tab" aria-selected={tab==='history'} className={tab==='history'?'selected':''} onClick={()=>setTab('history')}><History size={15}/>观看记录</button><button role="tab" aria-selected={tab==='favorites'} className={tab==='favorites'?'selected':''} onClick={()=>setTab('favorites')}><Bookmark size={15}/>我的收藏</button></div>
+      {loading?<div className="profile-drama-grid">{Array.from({length:4},(_,i)=><div className="profile-loading" key={i}/>)}</div>:error?<div className="profile-empty-state"><AlertCircle size={24}/><h3>片单暂时加载失败</h3><p>{error}</p><button className="secondary" onClick={()=>setRetry(n=>n+1)}>重试</button></div>:visible.length?<div className="profile-drama-grid">{visible.map(d=><button className="profile-drama-card" key={d.id} onClick={()=>onView(d.id)} aria-label={`观看${d.title}`}><div className="profile-drama-poster"><img src={d.coverImg} alt={d.title+'封面'} loading="lazy"/><span>{d.category}</span>{tab==='history'&&d.progressSec&&d.durationSec?<b>{Math.round(d.progressSec/d.durationSec*100)}%</b>:null}</div><strong>{d.title}</strong><small>{tab==='history'?'上次看到这里，继续播放':'已收藏 · 随时重看'}</small></button>)}</div>:<div className="profile-empty-state"><div className="profile-empty-icon">{tab==='history'?<History size={22}/>:<Bookmark size={22}/>}</div><h3>{tab==='history'?'还没有观看记录':'还没有收藏短剧'}</h3><p>{tab==='history'?'打开一部短剧，播放几秒后就能在这里继续。':'在发现页收藏喜欢的故事，之后可以快速找到。'}</p><button className="secondary" onClick={()=>onNavigate('home')}>去发现好剧<ArrowUpRight size={15}/></button></div>}
+    </section>
+  </div>;
 }
 
 function Admin({user,toast,onLogin,onView,onChange}:{user:User|null;toast:(s:string,error?:boolean)=>void;onLogin:()=>void;onView:(id:number)=>void;onChange:()=>void}){

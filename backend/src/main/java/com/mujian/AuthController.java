@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
@@ -47,23 +48,31 @@ public class AuthController {
         if (rows.isEmpty() || input.password().getBytes(StandardCharsets.UTF_8).length > 72 ||
             !passwords.matches(input.password(), (String)rows.getFirst().get("password")))
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"用户名或密码错误");
-        return session(rows.getFirst());
+        return session(find(input.username().trim()));
     }
     @GetMapping("/me")
     public Map<String,Object> me(@AuthenticationPrincipal Jwt jwt) {
-        var rows = db.queryForList("SELECT id,username,nickname,role FROM `user` WHERE id=?", jwt.getSubject());
+        var rows = db.queryForList("""
+            SELECT u.id,u.username,u.nickname,u.role,p.avatar_url AS avatarUrl,p.background_url AS backgroundUrl
+            FROM `user` u LEFT JOIN user_profile p ON p.user_id=u.id WHERE u.id=?
+            """, jwt.getSubject());
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在，请重新登录");
         return rows.getFirst();
     }
     private Map<String,Object> find(String username) {
-        return db.queryForMap("SELECT * FROM `user` WHERE username=?",username);
+        return db.queryForMap("""
+            SELECT u.id,u.username,u.nickname,u.role,p.avatar_url AS avatarUrl,p.background_url AS backgroundUrl
+            FROM `user` u LEFT JOIN user_profile p ON p.user_id=u.id WHERE u.username=?
+            """,username);
     }
     private Map<String,Object> session(Map<String,Object> user) {
         Instant now = Instant.now();
         var claims = JwtClaimsSet.builder().issuer("mujian").subject(user.get("id").toString())
             .issuedAt(now).expiresAt(now.plusSeconds(8*3600)).claim("role",user.get("role")).build();
         String token = tokens.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(),claims)).getTokenValue();
-        return Map.of("token",token,"user",Map.of("id",user.get("id"),"username",user.get("username"),
-            "nickname",user.get("nickname"),"role",user.get("role")));
+        var profile = new HashMap<String,Object>();
+        for (var key : new String[]{"id","username","nickname","role","avatarUrl","backgroundUrl"})
+            profile.put(key,user.get(key));
+        return Map.of("token",token,"user",profile);
     }
 }

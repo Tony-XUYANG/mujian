@@ -26,6 +26,9 @@ try {
   await context.request.put(base + `/api/dramas/${drama.id}/progress`, {
     headers: { Authorization: `Bearer ${token}` }, data: { progressSec: 12, durationSec: 52 },
   });
+  await context.request.put(base + `/api/dramas/${drama.id}/favorite`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   await page.goto(base);
   await page.getByRole('button', { name: '登录 / 注册', exact: true }).click();
   await page.getByLabel('用户名', { exact: true }).fill(username);
@@ -45,6 +48,40 @@ try {
   await page.locator('.toast').waitFor({ state: 'hidden' });
   await page.waitForFunction(() => [...document.querySelectorAll('.poster img')].every(image => image.complete && image.naturalWidth > 0));
   await page.screenshot({ path: screenshots + 'desktop-home.jpg', type: 'jpeg', quality: 82, fullPage: true });
+
+  await page.getByRole('button', { name: '我的', exact: true }).click();
+  await page.getByRole('heading', { name: '界面验收', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: '安装幕间 App' }).count(), 0);
+  assert.equal(await page.getByText('进度云同步').count(), 0);
+  await page.locator('input[aria-label="选择头像图片"]').setInputFiles(fileURLToPath(new URL('../frontend/public/media/sunset.jpg', import.meta.url)));
+  await page.getByText('头像已更新').waitFor();
+  await page.locator('input[aria-label="选择背景图片"]').setInputFiles(fileURLToPath(new URL('../frontend/public/media/forest.jpg', import.meta.url)));
+  await page.getByText('主页背景已更新').waitFor();
+  const profile = await (await context.request.get(base + '/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })).json();
+  assert.match(profile.avatarUrl, /^\/uploads\/.+\.jpg$/);
+  assert.match(profile.backgroundUrl, /^\/uploads\/.+\.jpg$/);
+  await page.reload();
+  await page.getByRole('heading', { name: '界面验收', exact: true }).waitFor();
+  assert.ok(await page.locator('.profile-avatar-xl img').isVisible(), 'uploaded avatar persists after reload');
+  assert.ok((await page.locator('.profile-cover').getAttribute('style')).includes(profile.backgroundUrl), 'uploaded background persists after reload');
+  await page.getByRole('tab', { name: '我的收藏' }).click();
+  await page.getByRole('button', { name: `观看${drama.title}`, exact: true }).waitFor();
+  await page.getByRole('tab', { name: '观看记录' }).click();
+  await page.getByRole('button', { name: `观看${drama.title}`, exact: true }).click();
+  await page.getByRole('dialog', { name: '短剧播放', exact: true }).waitFor();
+  await page.getByRole('button', { name: '关闭播放器', exact: true }).click();
+  await page.locator('.toast').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => [...document.querySelectorAll('.profile-drama-poster img')].every(image => image.complete && image.naturalWidth > 0));
+  await page.screenshot({ path: screenshots + 'desktop-profile.jpg', type: 'jpeg', quality: 82, fullPage: true });
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.reload();
+    await page.getByRole('heading', { name: '界面验收', exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `profile ${width}px should not overflow`);
+    await page.waitForFunction(() => [...document.querySelectorAll('.profile-drama-poster img')].every(image => image.complete && image.naturalWidth > 0));
+    await page.screenshot({ path: screenshots + `mobile-${width}-profile.jpg`, type: 'jpeg', quality: 82, fullPage: true });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
 
   await page.getByRole('button', { name: '继续观看', exact: true }).click();
   await page.getByRole('button', { name: `观看${drama.title}`, exact: true }).click();
