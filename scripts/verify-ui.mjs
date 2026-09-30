@@ -54,8 +54,10 @@ try {
   assert.equal(await page.getByRole('button', { name: '安装幕间 App' }).count(), 0);
   assert.equal(await page.getByText('进度云同步').count(), 0);
   await page.locator('input[aria-label="选择头像图片"]').setInputFiles(fileURLToPath(new URL('../frontend/public/media/sunset.jpg', import.meta.url)));
+  await page.getByRole('button', { name: '保存图片', exact: true }).click();
   await page.getByText('头像已更新').waitFor();
   await page.locator('input[aria-label="选择背景图片"]').setInputFiles(fileURLToPath(new URL('../frontend/public/media/forest.jpg', import.meta.url)));
+  await page.getByRole('button', { name: '保存图片', exact: true }).click();
   await page.getByText('主页背景已更新').waitFor();
   const profile = await (await context.request.get(base + '/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })).json();
   assert.match(profile.avatarUrl, /^\/uploads\/.+\.jpg$/);

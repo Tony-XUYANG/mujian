@@ -9,6 +9,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class ApiErrors {
@@ -27,6 +29,14 @@ public class ApiErrors {
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<?> conflict(DataIntegrityViolationException e) {
         return ResponseEntity.status(409).body(Map.of("message", "数据已变更或记录重复，请刷新后重试"));
+    }
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<?> oversizedUpload(MaxUploadSizeExceededException e) {
+        return ResponseEntity.status(413).body(Map.of("message", "请选择不超过5MB的图片"));
+    }
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    ResponseEntity<?> missingUpload(MissingServletRequestPartException e) {
+        return ResponseEntity.badRequest().body(Map.of("message", "请选择要上传的图片"));
     }
     @ExceptionHandler(Exception.class)
     ResponseEntity<?> unknown(Exception e) {

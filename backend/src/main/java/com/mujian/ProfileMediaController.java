@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
 import javax.imageio.ImageIO;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -86,8 +87,13 @@ public class ProfileMediaController {
             Files.deleteIfExists(target);
             throw e;
         }
-        if (old != null && old.startsWith("/uploads/"))
-            Files.deleteIfExists(uploads.resolve(Path.of(old).getFileName()));
+        if (old != null && old.startsWith("/uploads/")) {
+            try { Files.deleteIfExists(uploads.resolve(Path.of(old).getFileName())); }
+            catch (IOException e) {
+                // The new profile was saved successfully; old-file cleanup must not fail the request.
+                LoggerFactory.getLogger(ProfileMediaController.class).warn("Could not remove old profile image",e);
+            }
+        }
         return Map.of("url",url);
     }
 }
@@ -101,6 +107,7 @@ class ProfileMediaResources implements WebMvcConfigurer {
     }
 
     @Override public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/uploads/**").addResourceLocations(uploads.toUri().toString());
+        String location = uploads.toUri().toString();
+        registry.addResourceHandler("/uploads/**").addResourceLocations(location.endsWith("/") ? location : location+"/");
     }
 }

@@ -59,6 +59,20 @@ public class AuthController {
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在，请重新登录");
         return rows.getFirst();
     }
+    public record ProfileInput(
+        @NotBlank(message="请输入昵称") @Size(max=30,message="昵称最多30字") String nickname) {}
+
+    @PatchMapping("/profile")
+    public Map<String,Object> updateProfile(@Valid @RequestBody ProfileInput input,
+                                           @AuthenticationPrincipal Jwt jwt) {
+        String nickname = input.nickname().strip();
+        if (nickname.isBlank() || nickname.codePoints().anyMatch(Character::isISOControl))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"昵称不能为空或包含换行、控制字符");
+        // Identity comes only from the authenticated session; account and role cannot be edited here.
+        if (db.update("UPDATE `user` SET nickname=? WHERE id=?",nickname,jwt.getSubject()) == 0)
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在，请重新登录");
+        return me(jwt);
+    }
     private Map<String,Object> find(String username) {
         return db.queryForMap("""
             SELECT u.id,u.username,u.nickname,u.role,p.avatar_url AS avatarUrl,p.background_url AS backgroundUrl

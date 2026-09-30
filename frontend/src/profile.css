@@ -1,0 +1,65 @@
+/* Keep profile actions comfortable on phones without adding promotional panels. */
+.profile-identity { min-width: 0; }
+.profile-identity h1 { overflow-wrap: anywhere; }
+.profile-identity p { overflow-wrap: anywhere; }
+.profile-user { align-items: flex-end; }
+.profile-avatar-xl { flex-shrink: 0; overflow: visible; }
+.profile-avatar-xl img { border-radius: 50%; }
+.profile-avatar-xl > span { right: -3px; bottom: -2px; border: 2px solid #101011; }
+.profile-change-cover { min-height: 44px; }
+.profile-live-dot.is-offline { color: #b9b4ae; }
+.profile-live-dot.is-offline::before { background: #8e8c8b; box-shadow: none; }
+.profile-summary { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin: 24px 25px 0; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.profile-summary .profile-stats { margin: 0; padding: 0; border: 0; }
+.profile-edit, .profile-manage { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 7px; min-height: 44px; padding: 9px 13px; border: 1px solid #ffffff24; border-radius: 7px; background: #ffffff05; color: #d8cec6; font-size: 12px; }
+.profile-edit:hover, .profile-manage:hover { color: #fff; border-color: #f77b5966; }
+.profile-manage.active { color: var(--accent); border-color: #f77b5966; }
+.profile-library { margin-top: 12px; }
+.profile-tabs { margin-top: 0; }
+.profile-tabs button { min-height: 48px; padding: 10px 0; font-size: 13px; }
+.profile-library-tools { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+.profile-search { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; padding: 0 12px; min-height: 44px; border: 1px solid #ffffff12; border-radius: 7px; background: #19191b; color: #9b938b; }
+.profile-search input { width: 100%; min-width: 0; height: 42px; padding: 0; border: 0; outline: none; background: transparent; color: #e8ded5; font-size: 13px; }
+.profile-search:focus-within { border-color: var(--accent); }
+.profile-search button { display: grid; place-items: center; min-width: 32px; min-height: 42px; background: transparent; }
+.profile-drama-item { min-width: 0; }
+.profile-drama-card { width: 100%; }
+.profile-drama-poster .profile-progress { position: absolute; bottom: 0; left: 0; z-index: 2; height: 3px; background: var(--accent); }
+.profile-remove { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; margin-top: 10px; padding: 7px; border: 1px solid #f77b5933; border-radius: 6px; background: #f77b590b; color: #efa086; font-size: 12px; }
+.profile-image-modal .modal { max-width: 520px; }
+.crop-preview { position: relative; width: 100%; margin: 20px auto; overflow: hidden; border-radius: 10px; background: #0c0c0d; touch-action: none; cursor: grab; }
+.crop-preview:active { cursor: grabbing; }
+.crop-preview canvas { display: block; width: 100%; height: 100%; }
+.crop-preview.crop-avatar { max-width: 280px; }
+.crop-avatar::after { position: absolute; inset: 0; content: ''; border: 1px solid #fff8; border-radius: 50%; box-shadow: 0 0 0 120px #0009; pointer-events: none; }
+.crop-loading { display: flex; align-items: center; justify-content: center; gap: 8px; position: absolute; inset: 0; font-size: 13px; color: #aaa; }
+.crop-controls { display: grid; gap: 6px; }
+.crop-controls label { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0; margin: 0; font-size: 12px; color: #c5bbb3; }
+.crop-controls output { color: #aaa099; font-size: 11px; }
+.crop-controls input[type=range] { grid-column: 1 / -1; width: 100%; height: 36px; padding: 0; margin: 0; accent-color: var(--accent); background: transparent; cursor: pointer; }
+.crop-actions { gap: 8px; margin-top: 18px; }
+.crop-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 10px 12px; }
+.crop-actions button:first-child { margin-right: auto; }
+@media (max-width: 600px) {
+  .profile-cover { height: 200px; }
+  .profile-change-cover { top: 47px; right: 12px; bottom: auto; font-size: 12px; }
+  .profile-user { margin: -42px 8px 0; gap: 13px; }
+  .profile-identity { padding: 0; }
+  .profile-identity h1 { font-size: 22px; line-height: 1.3; }
+  .profile-identity p { font-size: 11px; line-height: 1.5; }
+  .profile-summary { margin: 22px 8px 0; gap: 8px; padding-bottom: 18px; }
+  .profile-summary .profile-stat { min-width: 0; padding-right: 17px; }
+  .profile-summary .profile-stat + .profile-stat { padding-left: 17px; padding-right: 0; }
+  .profile-stat span { white-space: nowrap; }
+  .profile-edit { padding: 8px 10px; font-size: 11px; }
+  .profile-library { margin-top: 10px; }
+  .profile-library-tools { gap: 8px; margin-top: 14px; }
+  .profile-search { padding: 0 9px; }
+  .profile-search input { font-size: 12px; }
+  .profile-manage { padding: 8px 10px; font-size: 11px; }
+  .profile-drama-grid { padding-top: 16px; }
+  .profile-drama-card > strong { font-size: 13px; }
+  .profile-drama-card > small { font-size: 11px; }
+  .profile-drama-poster b { font-size: 10px; }
+  .profile-image-modal .modal { padding: 24px 18px; }
+}

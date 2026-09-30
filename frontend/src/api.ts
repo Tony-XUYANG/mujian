@@ -5,7 +5,13 @@ export type DramaInput = Pick<Drama,'title'|'coverImg'|'description'|'videoUrl'|
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem('mujian_token');
-  const response = await fetch('/api'+path, { ...options, headers: { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers } });
+  let response: Response;
+  try {
+    response = await fetch('/api'+path, { ...options, headers: { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers } });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    throw new ApiError(0, navigator.onLine ? '暂时连接不上服务，请稍后重试' : '当前没有网络，请联网后重试');
+  }
   const data = await response.json().catch(() => ({ message: '服务响应异常，请稍后重试' }));
   if (!response.ok) {
     if(response.status === 401 && token && token === sessionStorage.getItem('mujian_token') && !path.startsWith('/auth/login') && !path.startsWith('/auth/register')) {
