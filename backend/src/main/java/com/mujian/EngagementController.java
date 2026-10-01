@@ -36,6 +36,7 @@ public class EngagementController {
             SELECT d.id,d.title,d.cover_img AS coverImg,d.description,d.video_url AS videoUrl,
               d.category,d.view_count AS viewCount,d.create_time AS createTime,
               h.progress_sec AS progressSec,h.duration_sec AS durationSec,h.last_watched AS lastWatched,
+              (SELECT e.episode_no FROM episode_progress p JOIN drama_episode e ON e.id=p.episode_id WHERE p.user_id=h.user_id AND e.drama_id=d.id ORDER BY p.last_watched DESC,e.id DESC LIMIT 1) AS resumeEpisodeNo,
               (SELECT COUNT(*) FROM user_like l WHERE l.drama_id=d.id) AS likeCount,
               (SELECT COUNT(*) FROM user_favorite f WHERE f.drama_id=d.id) AS favoriteCount
             FROM watch_history h JOIN drama d ON d.id=h.drama_id
@@ -43,10 +44,11 @@ public class EngagementController {
             """, userId);
     }
 
-    @PutMapping("/dramas/{id}/progress")
+    @PutMapping("/dramas/{id}/progress") @org.springframework.transaction.annotation.Transactional
     public Map<String, Object> progress(@PathVariable long id, @Valid @RequestBody Progress input,
                                         @AuthenticationPrincipal Jwt jwt) {
         dramas.require(id);
+        db.queryForObject("SELECT id FROM drama WHERE id=? FOR UPDATE",Long.class,id);
         long userId = DramaController.userId(jwt);
         int progress = Math.min(input.progressSec(), input.durationSec() > 0 ? input.durationSec() : input.progressSec());
         db.update("""
@@ -54,12 +56,20 @@ public class EngagementController {
             VALUES (?,?,?,?)
             ON DUPLICATE KEY UPDATE progress_sec=VALUES(progress_sec),duration_sec=VALUES(duration_sec),last_watched=CURRENT_TIMESTAMP
             """, userId, id, progress, input.durationSec());
+        db.update("""
+            INSERT INTO episode_progress(user_id,episode_id,progress_sec,duration_sec)
+            SELECT ?,id,?,? FROM drama_episode WHERE drama_id=? ORDER BY episode_no LIMIT 1
+            ON DUPLICATE KEY UPDATE progress_sec=VALUES(progress_sec),duration_sec=VALUES(duration_sec),last_watched=CURRENT_TIMESTAMP(6)
+            """,userId,progress,input.durationSec(),id);
         return Map.of("saved", true, "progressSec", progress, "durationSec", input.durationSec());
     }
 
     @DeleteMapping("/me/history/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @org.springframework.transaction.annotation.Transactional
     public void removeHistory(@PathVariable long id, @AuthenticationPrincipal Jwt jwt) {
+        db.queryForList("SELECT id FROM drama WHERE id=? FOR UPDATE",id);
+        db.update("DELETE p FROM episode_progress p JOIN drama_episode e ON e.id=p.episode_id WHERE p.user_id=? AND e.drama_id=?",DramaController.userId(jwt),id);
         db.update("DELETE FROM watch_history WHERE user_id=? AND drama_id=?", DramaController.userId(jwt), id);
     }
 

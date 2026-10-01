@@ -14,6 +14,11 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 
 @RestControllerAdvice
 public class ApiErrors {
+    @ExceptionHandler(org.apache.catalina.connector.ClientAbortException.class)
+    void disconnectedClient(org.apache.catalina.connector.ClientAbortException e) {
+        // Switching episodes cancels the previous media request; its socket is already closed.
+        LoggerFactory.getLogger(ApiErrors.class).debug("Media request cancelled by client", e);
+    }
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<?> known(ResponseStatusException e) {
         return ResponseEntity.status(e.getStatusCode()).body(Map.of("message", e.getReason() == null ? "请求失败" : e.getReason()));

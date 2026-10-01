@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
+@org.springframework.core.annotation.Order(10)
 public class DemoData implements CommandLineRunner {
     private final JdbcTemplate db; private final PasswordEncoder passwords;
     @Value("${app.seed-demo}") boolean seed;

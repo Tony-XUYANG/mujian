@@ -73,3 +73,45 @@ CREATE TABLE IF NOT EXISTS drama_comment (
   CONSTRAINT fk_comment_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
   INDEX idx_comment_drama_time (drama_id,create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS drama_series (
+  drama_id BIGINT PRIMARY KEY,
+  status VARCHAR(12) NOT NULL DEFAULT 'COMPLETED',
+  total_episodes INT NOT NULL DEFAULT 1,
+  CONSTRAINT fk_series_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
+  CONSTRAINT ck_series_status CHECK (status IN ('SERIALIZING','COMPLETED')),
+  CONSTRAINT ck_series_total CHECK (total_episodes BETWEEN 1 AND 500)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS drama_episode (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  drama_id BIGINT NOT NULL,
+  episode_no INT NOT NULL,
+  title VARCHAR(80) NOT NULL,
+  video_url VARCHAR(1000) NOT NULL,
+  create_time TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  CONSTRAINT uk_episode_number UNIQUE (drama_id,episode_no),
+  CONSTRAINT fk_episode_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
+  CONSTRAINT ck_episode_number CHECK (episode_no BETWEEN 1 AND 500)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS episode_progress (
+  user_id BIGINT NOT NULL,
+  episode_id BIGINT NOT NULL,
+  progress_sec INT NOT NULL DEFAULT 0,
+  duration_sec INT NOT NULL DEFAULT 0,
+  last_watched TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (user_id,episode_id),
+  CONSTRAINT fk_episode_progress_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_episode_progress_episode FOREIGN KEY (episode_id) REFERENCES drama_episode(id) ON DELETE CASCADE,
+  CONSTRAINT ck_episode_progress CHECK (progress_sec >= 0 AND duration_sec >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_follow (
+  user_id BIGINT NOT NULL,
+  drama_id BIGINT NOT NULL,
+  create_time TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (user_id,drama_id),
+  CONSTRAINT fk_follow_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_follow_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

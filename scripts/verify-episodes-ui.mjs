@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+const require=createRequire(new URL('../frontend/package.json',import.meta.url));
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const base=process.env.APP_URL||'http://127.0.0.1:8080';
+const out=fileURLToPath(new URL('../docs/screenshots/episodes/',import.meta.url));await mkdir(out,{recursive:true});
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||chromium.executablePath()});
+const context=await browser.newContext({viewport:{width:1440,height:1080}}),page=await context.newPage();
+const errors=[];page.on('pageerror',e=>errors.push(e.message));let checks=0;
+function pass(message){checks++;console.log('PASS '+checks+': '+message);}
+async function api(path,method='GET',body,token){const r=await context.request.fetch(base+'/api'+path,{method,data:body,headers:token?{Authorization:'Bearer '+token}:{}});assert.ok(r.ok(),path+' '+r.status()+' '+await r.text());return r.status()===204?null:r.json();}
+const admin=(await api('/auth/login','POST',{username:'admin',password:'Admin123!'})).token;
+const username='播控验收'+Date.now().toString(36),password='Player123!';
+const user=await api('/auth/register','POST',{username,password,nickname:'追剧体验官'});
+const d=await api('/admin/dramas','POST',{title:'星河来信 · 演示',category:'悬疑',description:'一封来自未来的信，让故事有了新的走向。此内容用于分集功能验收。',coverImg:'/media/mystery.jpg',videoUrl:'/media/sintel-trailer.mp4'},admin);
+let episodes=await api('/admin/dramas/'+d.id+'/episodes','POST',{episodeNo:2,title:'未寄出的答案',videoUrl:d.videoUrl},admin);
+episodes=await api('/admin/dramas/'+d.id+'/episodes','POST',{episodeNo:3,title:'故事未完',videoUrl:d.videoUrl},admin);
+const [first,second,third]=episodes;
+const waitVideo=()=>page.waitForFunction(()=>{const v=document.querySelector('.player-overlay video');return v&&v.readyState>=2&&Number.isFinite(v.duration);});
+const choose=async n=>{await page.getByRole('button',{name:'播放第'+n+'集',exact:true}).click();await page.waitForFunction(n=>document.querySelector('.current-episode')?.textContent.includes('第 '+n+' 集'),n);await waitVideo();};
+const pause=()=>page.locator('.player-overlay video').evaluate(v=>v.pause());
+const position=async t=>{await page.locator('.player-overlay video').evaluate((v,t)=>{v.pause();v.currentTime=t;},t);await page.waitForFunction(t=>Math.abs(document.querySelector('.player-overlay video').currentTime-t)<0.3,t);};
+const current=()=>page.locator('.player-overlay video').evaluate(v=>({time:v.currentTime,rate:v.playbackRate,paused:v.paused}));
+async function login(name,passw){await page.getByRole('button',{name:'登录 / 注册',exact:true}).click();await page.getByLabel('用户名',{exact:true}).fill(name);await page.getByLabel('密码',{exact:true}).fill(passw);await page.getByRole('button',{name:'登录幕间',exact:true}).click();await page.getByRole('button',{name:'退出登录',exact:true}).waitFor();}
+try {
+  await page.goto(base+'/#watch/'+d.id);await waitVideo();
+  assert.equal(await page.getByRole('button',{name:'播放第3集'}).count(),1);pass('游客可任意选集');
+  await page.getByRole('button',{name:'追剧',exact:true}).click();await page.getByRole('dialog',{name:'登录账号'}).waitFor();await page.getByRole('button',{name:'关闭登录窗口'}).click();pass('游客追剧引导登录');
+  await page.getByRole('button',{name:'关闭播放器'}).click();await login(username,password);
+  await page.getByRole('button',{name:'观看'+d.title,exact:true}).click();await waitVideo();
+  await page.getByRole('button',{name:'追剧',exact:true}).click();await page.getByRole('button',{name:'已追剧',exact:true}).waitFor();pass('一键追剧真实持久化');
+  await page.getByLabel('播放倍速').selectOption('1.5');assert.equal((await current()).rate,1.5);pass('倍速直接作用于视频');
+  await position(12);await choose(2);await pause();assert.equal((await current()).rate,1.5);assert.ok((await current()).time<3);pass('切集保留倍速且进度不串集');
+  await position(7);await page.getByRole('button',{name:'关闭播放器'}).click();
+  await page.waitForFunction(async id=>{const t=sessionStorage.getItem('mujian_token');const d=await(await fetch('/api/dramas/'+id,{headers:{Authorization:'Bearer '+t}})).json();return d.resumeEpisodeNo===2&&d.progressSec===7;},d.id);
+  const saved=await api('/dramas/'+d.id+'/episodes','GET',undefined,user.token);assert.equal(saved[0].progressSec,12);assert.equal(saved[1].progressSec,7);pass('关闭播放器保存每集独立进度');
+  await page.getByRole('button',{name:'观看'+d.title,exact:true}).click();await waitVideo();assert.ok((await current()).time>=7&&(await current()).time<8);assert.match(await page.locator('.current-episode').innerText(),/第 2 集/);pass('重新打开自动恢复最近观看集');
+  await page.getByLabel('自动播放下一集').uncheck();await position(51.8);await page.locator('.player-overlay video').evaluate(v=>v.play());await page.locator('.episode-finished').waitFor();assert.match(await page.locator('.current-episode').innerText(),/第 2 集/);pass('关闭自动连播后结束不切集');
+  await page.getByLabel('自动播放下一集').check();await position(51.8);await page.locator('.player-overlay video').evaluate(v=>v.play());await page.waitForFunction(()=>document.querySelector('.current-episode')?.textContent.includes('第 3 集'));await waitVideo();await pause();pass('播放结束真实触发下一集');
+  await position(51.8);await page.locator('.player-overlay video').evaluate(v=>v.play());await page.locator('.episode-finished').waitFor();assert.match(await page.locator('.episode-finished').innerText(),/最新一集/);pass('连载最后一集停止并提示追更');
+  await choose(1);await pause();await page.getByRole('button',{name:'离线缓存',exact:true}).click();await page.getByRole('button',{name:'已缓存',exact:true}).waitFor();await choose(2);await pause();await page.getByRole('button',{name:'离线缓存',exact:true}).click();await page.getByRole('button',{name:'已缓存',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('mujian_downloads')).length),2);pass('同一部剧多集缓存互不覆盖');
+  await page.locator('.player-overlay video').evaluate(v=>{Object.defineProperty(document,'pictureInPictureEnabled',{configurable:true,value:false});});await page.getByRole('button',{name:'小窗',exact:true}).click();await page.getByText('当前浏览器暂不支持小窗播放',{exact:true}).waitFor();pass('不支持画中画时显示中文说明');
+  await page.reload();await page.getByRole('button',{name:'观看'+d.title,exact:true}).click();await waitVideo();await pause();assert.equal(await page.getByLabel('播放倍速').inputValue(),'1.5');pass('刷新后记住播放偏好');
+  await page.getByRole('button',{name:'正序',exact:true}).click();assert.match(await page.locator('.episode-grid button').first().getAttribute('aria-label'),/第3集/);pass('选集正倒序切换');
+  await page.locator('.toast').waitFor({state:'hidden'});await page.screenshot({path:out+'desktop-player.jpg',type:'jpeg',quality:85});
+  for(const width of [390,320]){
+    await page.setViewportSize({width,height:844});await choose(1);await pause();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.equal(await page.locator('.player-overlay .modal').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
+    await page.screenshot({path:out+'mobile-'+width+'-player.jpg',type:'jpeg',quality:85});
+  }pass('390/320 像素播放器无横向溢出');
+  await page.getByRole('button',{name:'关闭播放器'}).click();await page.getByRole('button',{name:'我的追剧',exact:true}).click();await page.getByRole('heading',{name:d.title,exact:true}).waitFor();
+  await api('/admin/dramas/'+d.id+'/episodes','POST',{episodeNo:4,title:'新的回声',videoUrl:d.videoUrl},admin);await page.reload();await page.getByText('1 集新上线 · 2 集还没看完',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'有新集',exact:true}).click();await page.getByRole('heading',{name:d.title,exact:true}).waitFor();pass('追剧片单能筛选后台刚发布的新集');
+  await page.getByLabel('搜索追剧').fill('不存在的故事');await page.getByRole('heading',{name:'没有符合条件的短剧'}).waitFor();await page.getByLabel('搜索追剧').fill('');pass('追剧搜索及空状态');
+  await page.screenshot({path:out+'mobile-following.jpg',type:'jpeg',quality:85,fullPage:true});await page.setViewportSize({width:1440,height:1080});await page.screenshot({path:out+'desktop-following.jpg',type:'jpeg',quality:85,fullPage:true});
+  await page.getByRole('button',{name:'取消追剧',exact:true}).click();await page.getByRole('button',{name:'继续追剧',exact:true}).click();assert.equal(await page.locator('.following-card').count(),1);pass('取消追剧有确认且可保留');
+  await page.getByRole('button',{name:'取消追剧',exact:true}).click();await page.getByRole('button',{name:'确认取消追剧',exact:true}).click();await page.getByRole('heading',{name:'追剧片单还是空的'}).waitFor();pass('确认后取消追剧');
+  await page.getByRole('button',{name:'退出登录'}).click();await login('admin','Admin123!');await page.getByRole('button',{name:'内容管理',exact:true}).click();await page.getByRole('button',{name:'管理'+d.title+'的分集'}).click();await page.getByRole('button',{name:'编辑第2集'}).waitFor();
+  await page.getByRole('button',{name:'编辑第2集'}).click();await page.getByLabel('分集标题',{exact:true}).fill('重写的答案');await page.getByRole('button',{name:'保存分集',exact:true}).click();await page.getByText('分集已保存，播放页已同步更新').waitFor();assert.equal((await api('/dramas/'+d.id+'/episodes'))[1].title,'重写的答案');pass('后台可编辑真实分集内容');
+  await page.getByLabel('集号',{exact:true}).fill('2');await page.getByLabel('分集标题',{exact:true}).fill('重复集号');await page.getByRole('button',{name:'保存分集',exact:true}).click();await page.getByRole('alert').filter({hasText:'已有第2集'}).waitFor();pass('后台显示中文重复集号校验');
+  await page.getByLabel('连载状态').selectOption('COMPLETED');await page.getByRole('button',{name:'保存状态',exact:true}).click();await page.getByText('连载状态已更新').waitFor();pass('后台发布齐全后可标记完结');
+  await page.getByRole('button',{name:'删除第4集'}).click();await page.getByRole('button',{name:'确认删除分集'}).click();await page.getByText('分集已删除，状态已调整为连载中').waitFor();pass('后台删除分集并恢复连载');
+  await page.screenshot({path:out+'desktop-admin.jpg',type:'jpeg',quality:85});await page.setViewportSize({width:320,height:844});assert.equal(await page.locator('.episode-admin-overlay>.modal').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);await page.screenshot({path:out+'mobile-admin.jpg',type:'jpeg',quality:85});pass('手机后台分集管理无横向溢出');
+  assert.deepEqual(errors,[]);pass('浏览器无未捕获异常');
+  console.log(checks+' browser episode checks passed.');
+} finally {await api('/admin/dramas/'+d.id,'DELETE',undefined,admin);await browser.close();}
