@@ -1,0 +1,28 @@
+import { useEffect, useState, type FormEvent } from 'react';
+import { CalendarClock, LoaderCircle, Pencil, RefreshCw } from 'lucide-react';
+import { api, type Drama } from './api';
+import { Modal } from './Modal';
+import { releaseStatus, releaseTime, useLiveRevision, type ReleasePlan } from './releases';
+
+// datetime-local is deliberately interpreted as Beijing time, even on devices abroad.
+const beijingInput=(t:number)=>new Date(t+8*3600000).toISOString().slice(0,16);
+export function ScheduleManager({drama,nextEpisode,onChange}:{drama:Drama;nextEpisode:number;onChange:()=>void}){
+  const [revision,refresh]=useLiveRevision();
+  const [rows,setRows]=useState<ReleasePlan[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+  const [editing,setEditing]=useState<number|null>(null),[number,setNumber]=useState(nextEpisode),[title,setTitle]=useState(''),[url,setUrl]=useState(drama.videoUrl),[time,setTime]=useState(()=>beijingInput(Date.now()+86400000));
+  const [confirm,setConfirm]=useState<{plan:ReleasePlan;action:'publish'|'cancel'}|null>(null);
+  const path='/admin/dramas/'+drama.id+'/release-plans';
+  async function load(){try{const r=await api<ReleasePlan[]>(path);setRows(r);return r;}catch(e){setError((e as Error).message);return null;}finally{setLoading(false);}}
+  useEffect(()=>{void load();if(revision)onChange();},[drama.id,revision]);
+  useEffect(()=>{if(editing===null)setNumber(Math.max(nextEpisode,...rows.filter(p=>p.status==='SCHEDULED').map(p=>p.episodeNo+1)));},[nextEpisode,rows,editing]);
+  function edit(p:ReleasePlan){setEditing(p.id);setNumber(p.episodeNo);setTitle(p.title);setUrl(p.videoUrl||'');setTime(beijingInput(p.publishAt));setNotice('');setError('');}
+  function reset(){setEditing(null);setTitle('');setUrl(drama.videoUrl);setTime(beijingInput(Date.now()+86400000));}
+  async function save(e:FormEvent){e.preventDefault();if(busy)return;setError('');setNotice('');const publishAt=Date.parse(time+':00+08:00');if(!Number.isFinite(publishAt)||publishAt<=Date.now()){setError('请选择晚于现在的北京时间');return;}setBusy(true);try{await api(editing?'/admin/release-plans/'+editing:path,{method:editing?'PUT':'POST',body:JSON.stringify({episodeNo:number,title,videoUrl:url,publishAt})});await load();reset();onChange();setNotice('排期已保存，更新日历已同步');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  async function act(){if(!confirm||busy)return;setBusy(true);setError('');setNotice('');try{await api('/admin/release-plans/'+confirm.plan.id+'/'+confirm.action,{method:'POST'});setNotice(confirm.action==='publish'?'新集已上线，更新提醒已送达站内信箱':'排期已取消，预约列表会显示取消状态');setConfirm(null);await load();onChange();}catch(e){setError((e as Error).message);setConfirm(null);}finally{setBusy(false);}}
+  return <section className="schedule-manager" aria-label="发布排期"><h3><CalendarClock size={19}/>发布排期<button className="icon-button schedule-refresh" type="button" aria-label="刷新后台排期" onClick={refresh}><RefreshCw size={16}/></button></h3><p className="field-hint">按北京时间自动上线。预约和追剧用户会收到站内提醒；改期保留原有预约。</p>
+    {loading?<p><LoaderCircle className="spin" size={18}/>加载排期…</p>:<div className="schedule-list">{rows.map(p=><article key={p.id}><div><strong>第 {p.episodeNo} 集 · {p.title}</strong><small>{releaseTime(p.publishAt)} · {releaseStatus[p.status]} · {p.reservationCount||0} 人预约</small></div>{p.status!=='PUBLISHED'&&<div className="schedule-actions"><button className="icon-button" disabled={busy} aria-label={'修改第'+p.episodeNo+'集排期'} onClick={()=>edit(p)}><Pencil size={16}/></button>{p.status==='SCHEDULED'&&<><button className="secondary" disabled={busy} onClick={()=>setConfirm({plan:p,action:'publish'})} aria-label={'立即发布第'+p.episodeNo+'集'}>立即发布</button><button className="icon-button danger" disabled={busy} onClick={()=>setConfirm({plan:p,action:'cancel'})} aria-label={'取消第'+p.episodeNo+'集排期'}>取消</button></>}</div>}</article>)}{!rows.length&&<p className="field-hint">还没有排期，可在下方安排下一集。</p>}</div>}
+    <form className="schedule-form" onSubmit={save}><h4>{editing?'修改 / 恢复排期':'安排新一集'}</h4><div className="form-row"><label>排期集号<input required type="number" min={1} max={500} value={number} disabled={busy||editing!==null} onChange={e=>setNumber(Number(e.target.value))}/></label><label>排期标题<input required maxLength={80} value={title} disabled={busy} onChange={e=>setTitle(e.target.value)} placeholder="新一集的故事"/></label></div><label>排期视频地址<input required maxLength={1000} value={url} disabled={busy} onChange={e=>setUrl(e.target.value)}/></label><label>发布时间（北京时间）<input type="datetime-local" required value={time} disabled={busy} onChange={e=>setTime(e.target.value)}/></label><div className="modal-actions">{editing&&<button className="secondary" type="button" disabled={busy} onClick={reset}>放弃修改排期</button>}<button className="primary" disabled={busy}>保存排期</button></div></form>
+    {error&&<div className="release-error" role="alert">{error}<button className="secondary" onClick={()=>void load()}>刷新排期</button></div>}{notice&&<p className="episode-success" role="status">{notice}</p>}
+    {confirm&&<Modal label={confirm.action==='publish'?'确认发布':'确认取消排期'} onClose={()=>{if(!busy)setConfirm(null);}}><h2>{confirm.action==='publish'?'现在发布':'取消排期'}第 {confirm.plan.episodeNo} 集？</h2><p className="muted">{confirm.action==='publish'?'发布后即可播放，并向预约和追剧用户生成站内提醒。':'取消后不会自动发布。原预约会保留取消状态，重新排期后继续有效。'}</p><div className="modal-actions"><button className="secondary" disabled={busy} onClick={()=>setConfirm(null)}>返回</button><button className="primary" disabled={busy} onClick={()=>void act()}>{confirm.action==='publish'?'确认立即发布':'确认取消排期'}</button></div></Modal>}
+  </section>;
+}

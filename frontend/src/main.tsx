@@ -7,11 +7,13 @@ import { Profile } from './Profile';
 import { Player } from './Player';
 import { EpisodeManager } from './EpisodeManager';
 import { Following } from './Following';
+import { NotificationEntry, NotificationInbox } from './NotificationInbox';
 import { readDownloads, downloadKey, DOWNLOADS_KEY, type DownloadedDrama } from './downloads';
 import { seriesLabel } from './api';
 import './style.css';
 import './profile.css';
 import './episodes.css';
+import './releases.css';
 
 const categories = ['全部','都市','悬疑','治愈','古装','爱情'];
 const emptyInput: DramaInput = { title:'', coverImg:'/media/forest.jpg', description:'', videoUrl:'/media/sintel-trailer.mp4', category:'都市' };
@@ -37,13 +39,15 @@ function App() {
   const [refresh,setRefresh]=useState(0);
   const [auth,setAuth]=useState(false);
   const [selected,setSelected]=useState<number|null>(sharedDramaId);
+  const [selectedEpisode,setSelectedEpisode]=useState<number|undefined>();
+  const openEpisode=(id:number,episodeId?:number)=>{setSelectedEpisode(episodeId);setSelected(id);};
   const [notice,setNotice]=useState<Notice|null>(null);
   const [ready,setReady]=useState(false);
   const [installPrompt,setInstallPrompt]=useState<InstallPrompt|null>(null);
   const [downloads,setDownloads]=useState<DownloadedDrama[]>(readDownloads);
   const toast=(text:string,error=false)=>setNotice({text,error});
   const reload=()=>setRefresh(n=>n+1);
-  useEffect(()=>{ const change=()=>{setRoute(routeNow());setSelected(sharedDramaId());setQuery('');setSearch('');setCategory('全部');};window.addEventListener('hashchange',change); return()=>window.removeEventListener('hashchange',change);},[]);
+  useEffect(()=>{ const change=()=>{setRoute(routeNow());setSelectedEpisode(undefined);setSelected(sharedDramaId());setQuery('');setSearch('');setCategory('全部');};window.addEventListener('hashchange',change); return()=>window.removeEventListener('hashchange',change);},[]);
   useEffect(()=>{const t=setTimeout(()=>setSearch(query.trim()),250);return()=>clearTimeout(t);},[query]);
   useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(null),3500);return()=>clearTimeout(t);},[notice]);
   useEffect(()=>{const onInstall=(event:Event)=>{event.preventDefault();setInstallPrompt(event as InstallPrompt);};window.addEventListener('beforeinstallprompt',onInstall);return()=>window.removeEventListener('beforeinstallprompt',onInstall);},[]);
@@ -63,14 +67,14 @@ function App() {
     if(!ready)return;
     let active=true;
     if((route==='favorites'||route==='history')&&!user){setDramas([]);setLoading(false);setError('');return;}
-    if(route==='profile'||route==='offline'||route==='admin'||route==='following'){setDramas([]);setLoading(false);setError('');return;}
+    if(route==='profile'||route==='offline'||route==='admin'||route==='following'||route==='notifications'){setDramas([]);setLoading(false);setError('');return;}
     setLoading(true);setError('');
     const path=route==='favorites'?'/me/favorites':route==='history'?'/me/history':`/dramas?q=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&sort=${route==='popular'?'popular':sort}`;
     api<Drama[]>(path).then(data=>{if(active)setDramas(data);}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});
     return()=>{active=false;};
   },[ready,user,route,search,category,sort,refresh]);
-  const navigate=(target:string)=>{window.location.hash=target;setSelected(null);};
-  const closePlayer=()=>{if(sharedDramaId())window.history.replaceState(null,'','#home');setSelected(null);};
+  const navigate=(target:string)=>{window.location.hash=target;setSelectedEpisode(undefined);setSelected(null);};
+  const closePlayer=()=>{setSelectedEpisode(undefined);if(sharedDramaId())window.history.replaceState(null,'','#home');setSelected(null);};
   async function removeHistory(id:number){
     try{await api(`/me/history/${id}`,{method:'DELETE'});setDramas(current=>current.filter(d=>d.id!==id));toast('已移除观看记录');}
     catch(e){toast((e as Error).message,true);}
@@ -96,13 +100,14 @@ function App() {
       <div className="sidebar-bottom"><div className="small-film"><Film size={19}/></div><strong>把生活调成电影模式</strong><p>不必等到周末<br/>现在，就是好时光。</p><span className="sidebar-line"/><span className="copyright">© 2026 幕间 · 每一刻都有戏</span></div>
     </aside>
     <div className="main-shell">
-      <header className="topbar"><span className="top-location">{route==='following'?'我的追剧':route==='admin'?'创作者工作台':route==='favorites'?'我的片单':route==='popular'?'人气榜单':route==='history'?'继续观看':route==='profile'?'个人中心':'发现'}<ChevronRight size={14}/><span>{route==='admin'?'内容管理':route==='profile'?'幕间 App':'幕间短剧'}</span></span>
+      <header className="topbar"><span className="top-location">{route==='notifications'?'更新提醒':route==='following'?'我的追剧':route==='admin'?'创作者工作台':route==='favorites'?'我的片单':route==='popular'?'人气榜单':route==='history'?'继续观看':route==='profile'?'个人中心':'发现'}<ChevronRight size={14}/><span>{route==='admin'?'内容管理':route==='profile'?'幕间 App':'幕间短剧'}</span></span>
         {isLibrary&&<div className="search-box"><Search size={17}/><input aria-label="搜索短剧" placeholder="搜索一部好故事…" value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button className="icon-button" aria-label="清空搜索" onClick={()=>setQuery('')}><X size={14}/></button>}</div>}
         <button className="icon-button offline-entry" onClick={()=>navigate('offline')} aria-label="打开离线片库" title={`离线片库 · ${downloads.length} 部`}><Download size={18}/>{downloads.length>0&&<span className="offline-count">{downloads.length}</span>}</button>
+        <NotificationEntry key={user?.id||'guest'} user={user} refresh={refresh} onOpen={()=>navigate('notifications')}/>
         <div className="account">{user?<><span className="avatar">{user.avatarUrl?<img src={user.avatarUrl} alt=""/>:user.nickname.slice(0,1)}</span><span className="nickname">{user.nickname}</span><button className="icon-button" onClick={logout} aria-label="退出登录" title="退出登录"><LogOut size={17}/></button></>:<button className="login-button" onClick={()=>setAuth(true)}>登录 / 注册<ArrowUpRight size={15}/></button>}</div>
       </header>
       <main>
-        {route==='following'?<Following key={user?.id||'guest'} user={user} onLogin={()=>setAuth(true)} onView={setSelected} refresh={refresh} onChange={reload}/>:route==='admin'?<Admin user={user} toast={toast} onLogin={()=>setAuth(true)} onView={setSelected} onChange={reload}/>:route==='offline'?<OfflineLibrary items={downloads} toast={toast} onNavigate={navigate}/>:route==='profile'?<Profile key={user?.id || 'guest'} user={user} onLogin={()=>setAuth(true)} onNavigate={navigate} onView={setSelected} onUserUpdated={updated=>setUser(current=>current?.id===updated.id?updated:current)} toast={toast} refresh={refresh}/>:<>
+        {route==='notifications'?<NotificationInbox key={user?.id||'guest'} user={user} onLogin={()=>setAuth(true)} onView={openEpisode} onChange={reload}/>:route==='following'?<Following user={user} onLogin={()=>setAuth(true)} onView={openEpisode} refresh={refresh} onChange={reload}/>:route==='admin'?<Admin user={user} toast={toast} onLogin={()=>setAuth(true)} onView={setSelected} onChange={reload}/>:route==='offline'?<OfflineLibrary items={downloads} toast={toast} onNavigate={navigate}/>:route==='profile'?<Profile key={user?.id || 'guest'} user={user} onLogin={()=>setAuth(true)} onNavigate={navigate} onView={setSelected} onUserUpdated={updated=>setUser(current=>current?.id===updated.id?updated:current)} toast={toast} refresh={refresh}/>:<>
           {isHome&&!search&&category==='全部'&&<div className="page-intro"><div><p className="eyebrow">A LITTLE BREAK. A GREAT STORY.</p><h1>好故事，<span>随时入戏。</span></h1></div><div className="intro-actions"><button className="secondary mood-button" onClick={()=>{if(!dramas.length)return;setSelected(dramas[Math.floor(Math.random()*dramas.length)].id);}}><Sparkles size={15}/>心情选剧</button><span className="edition"><span/> 即刻开启你的观剧时光</span></div></div>}
           {isHome&&!search&&category==='全部'&&featured&&!loading&&<section className="hero" style={{backgroundImage:`url("${featured.coverImg}")`}} aria-label="今日精选">
             <div className="hero-shade"/><div className="hero-content"><div className="hero-label"><span/> 幕间精选 <span className="label-sep">/</span> EDITOR'S PICK</div><h2>{featured.title}</h2><p className="hero-subtitle">在故事里，遇见另一种人生。</p><p className="hero-description">{featured.description}</p><div className="hero-meta"><span>{featured.category}</span><span>{seriesLabel(featured)}</span><span>免费观赏</span></div><button className="primary hero-play" onClick={()=>setSelected(featured.id)}><Play size={17} fill="currentColor"/>立即观看<ChevronRight size={16}/></button></div><div className="hero-index"><span>01</span> / {String(dramas.length).padStart(2,'0')}<div className="hero-progress"><i/></div></div><div className="hero-vertical">LET THE STORY BEGIN</div>
@@ -116,7 +121,7 @@ function App() {
       </main>
     </div>
     {auth&&<AuthModal onClose={()=>setAuth(false)} onSuccess={login}/>}
-    {selected!==null&&<Player key={selected} id={selected} user={user} onClose={closePlayer} onLogin={()=>setAuth(true)} toast={toast} onChange={reload}/>}
+    {selected!==null&&<Player key={selected} initialEpisodeId={selectedEpisode} id={selected} user={user} onClose={closePlayer} onLogin={()=>setAuth(true)} toast={toast} onChange={reload}/>}
     {notice&&<div className={'toast'+(notice.error?' toast-error':'')} role="status">{notice.error?<AlertCircle size={18}/>:<CheckCircle2 size={18}/>} {notice.text}</div>}
   </div>;
 }

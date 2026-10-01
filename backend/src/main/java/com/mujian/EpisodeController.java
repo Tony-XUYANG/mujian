@@ -16,7 +16,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class EpisodeController {
     private final JdbcTemplate db;
     private final DramaRepository dramas;
-    public EpisodeController(JdbcTemplate db, DramaRepository dramas) { this.db=db; this.dramas=dramas; }
+    private final ReleaseService releases;
+    public EpisodeController(JdbcTemplate db, DramaRepository dramas, ReleaseService releases) { this.db=db; this.dramas=dramas; this.releases=releases; }
 
     public record EpisodeInput(@Min(value=1,message="集号需为1–500") @Max(value=500,message="集号需为1–500") int episodeNo,
         @NotBlank(message="请输入分集标题") @Size(max=80,message="分集标题最多80字") String title,
@@ -86,6 +87,9 @@ public class EpisodeController {
     @PutMapping("/admin/dramas/{id}/series") @Transactional
     public Map<String,Object> series(@PathVariable long id,@Valid @RequestBody SeriesInput in) {
         lock(id);
+        int planned=db.queryForObject("SELECT COALESCE(MAX(episode_no),0) FROM episode_release_plan WHERE drama_id=? AND status='SCHEDULED'",Integer.class,id);
+        if(planned>in.totalEpisodes()) bad("总集数不能小于已排期的最大集号");
+        if(planned>0 && in.status().equals("COMPLETED")) bad("还有未发布的排期，暂时不能标记完结");
         int max=db.queryForObject("SELECT COALESCE(MAX(episode_no),0) FROM drama_episode WHERE drama_id=?",Integer.class,id);
         int count=db.queryForObject("SELECT COUNT(*) FROM drama_episode WHERE drama_id=?",Integer.class,id);
         if(in.totalEpisodes()<max) bad("总集数不能小于已发布的最大集号");
@@ -97,6 +101,8 @@ public class EpisodeController {
     public List<Map<String,Object>> add(@PathVariable long id,@Valid @RequestBody EpisodeInput in) {
         lock(id); validateEpisode(id,0,in);
         db.update("INSERT INTO drama_episode(drama_id,episode_no,title,video_url) VALUES (?,?,?,?)",id,in.episodeNo(),in.title().trim(),in.videoUrl());
+        long episodeId=db.queryForObject("SELECT id FROM drama_episode WHERE drama_id=? AND episode_no=?",Long.class,id,in.episodeNo());
+        releases.notifyPublished(id,episodeId,0);
         db.update("UPDATE drama_series SET status='SERIALIZING',total_episodes=GREATEST(total_episodes,?) WHERE drama_id=?",in.episodeNo(),id);
         syncFirst(id); return episodes(id,null);
     }
@@ -136,6 +142,7 @@ public class EpisodeController {
     }
     private void validateEpisode(long id,long episodeId,EpisodeInput in) {
         AdminController.validateUrl(in.videoUrl());
+        releases.ensureNotScheduled(id,in.episodeNo(),0);
         if(db.queryForObject("SELECT COUNT(*) FROM drama_episode WHERE drama_id=? AND episode_no=? AND id<>?",Integer.class,id,in.episodeNo(),episodeId)>0)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"这部短剧已有第"+in.episodeNo()+"集，请使用其他集号");
     }

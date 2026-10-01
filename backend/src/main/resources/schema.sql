@@ -115,3 +115,42 @@ CREATE TABLE IF NOT EXISTS user_follow (
   CONSTRAINT fk_follow_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
   CONSTRAINT fk_follow_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Epoch milliseconds keep release times independent of JVM / MySQL session timezones.
+CREATE TABLE IF NOT EXISTS episode_release_plan (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  drama_id BIGINT NOT NULL,
+  episode_no INT NOT NULL,
+  title VARCHAR(80) NOT NULL,
+  video_url VARCHAR(1000) NOT NULL,
+  publish_at BIGINT NOT NULL,
+  status VARCHAR(12) NOT NULL DEFAULT 'SCHEDULED',
+  episode_id BIGINT NULL,
+  published_at BIGINT NULL,
+  CONSTRAINT fk_plan_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
+  CONSTRAINT fk_plan_episode FOREIGN KEY (episode_id) REFERENCES drama_episode(id) ON DELETE SET NULL,
+  CONSTRAINT ck_plan_number CHECK (episode_no BETWEEN 1 AND 500),
+  CONSTRAINT ck_plan_status CHECK (status IN ('SCHEDULED','PUBLISHED','CANCELLED')),
+  INDEX idx_plan_due (status,publish_at),
+  INDEX idx_plan_drama (drama_id,episode_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_reservation (
+  user_id BIGINT NOT NULL,
+  plan_id BIGINT NOT NULL,
+  PRIMARY KEY (user_id,plan_id),
+  CONSTRAINT fk_reservation_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_reservation_plan FOREIGN KEY (plan_id) REFERENCES episode_release_plan(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_notification (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  episode_id BIGINT NOT NULL,
+  created_at BIGINT NOT NULL,
+  read_at BIGINT NULL,
+  CONSTRAINT uk_notification_episode UNIQUE (user_id,episode_id),
+  CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_notification_episode FOREIGN KEY (episode_id) REFERENCES drama_episode(id) ON DELETE CASCADE,
+  INDEX idx_notification_inbox (user_id,read_at,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Check, ListVideo, LoaderCircle, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api, seriesLabel, type Drama, type Episode } from './api';
 import { Modal } from './Modal';
+import { ScheduleManager } from './ScheduleManager';
 
 type Input={episodeNo:number;title:string;videoUrl:string};
 export function EpisodeManager({drama,onClose,onChange}:{drama:Drama;onClose:()=>void;onChange:()=>void}) {
@@ -24,6 +25,7 @@ export function EpisodeManager({drama,onClose,onChange}:{drama:Drama;onClose:()=
       <div className="episode-admin-list">{episodes.map(ep=><article key={ep.id}><span className="episode-number">{ep.episodeNo}</span><div><strong>{ep.title}</strong><small>{ep.videoUrl}</small></div><button className="icon-button" disabled={busy} aria-label={'编辑第'+ep.episodeNo+'集'} onClick={()=>edit(ep)}><Pencil size={16}/></button><button className="icon-button danger" disabled={busy||episodes.length<=1} aria-label={'删除第'+ep.episodeNo+'集'} onClick={()=>setDeleting(ep)}><Trash2 size={16}/></button></article>)}</div>
       <form className="episode-editor" onSubmit={saveEpisode}><h3><ListVideo size={17}/>{editing?'编辑分集':'新增分集'}</h3><div className="form-row"><label>集号<input type="number" min={1} max={500} required value={form.episodeNo} onChange={e=>setForm({...form,episodeNo:Number(e.target.value)})} disabled={busy}/></label><label>分集标题<input required maxLength={80} value={form.title} placeholder="这一集的故事" onChange={e=>setForm({...form,title:e.target.value})} disabled={busy}/></label></div><label>分集视频地址<input required maxLength={1000} value={form.videoUrl} onChange={e=>setForm({...form,videoUrl:e.target.value})} disabled={busy}/></label><div className="modal-actions">{editing&&<button className="secondary" type="button" disabled={busy} onClick={reset}>取消编辑</button>}<button className="primary" disabled={busy}>{editing?<Check size={16}/>:<Plus size={16}/>}保存分集</button></div></form>
     </>}
+    {!loading&&<ScheduleManager drama={info} nextEpisode={Math.max(...episodes.map(e=>e.episodeNo),0)+1} onChange={()=>{void Promise.all([api<Episode[]>('/dramas/'+drama.id+'/episodes'),api<Drama>('/dramas/'+drama.id)]).then(([e,d])=>{setEpisodes(e);setInfo(d);setTotal(d.totalEpisodes||1);setStatus(d.seriesStatus||'COMPLETED');}).catch(e=>setError(e.message));onChange();}}/>}
     {error&&<div className="form-error" role="alert">{error}{!episodes.length&&<button className="secondary" onClick={refresh}>重新加载</button>}</div>}{notice&&<p className="episode-success" role="status">{notice}</p>}
     {deleting&&<Modal label="删除分集" onClose={()=>{if(!busy)setDeleting(null);}}><h2>删除第 {deleting.episodeNo} 集？</h2><p className="muted">这集的观看进度也会删除，其他分集保留。删除后短剧将恢复为连载中。</p><div className="modal-actions"><button className="secondary" disabled={busy} onClick={()=>setDeleting(null)}>保留</button><button className="primary destructive" disabled={busy} onClick={remove}>确认删除分集</button></div></Modal>}
   </Modal>;

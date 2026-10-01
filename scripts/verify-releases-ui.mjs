@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+const require=createRequire(new URL('../frontend/package.json',import.meta.url));
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const base=process.env.APP_URL||'http://127.0.0.1:8080';
+const out=fileURLToPath(new URL('../docs/screenshots/releases/',import.meta.url));await mkdir(out,{recursive:true});
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||chromium.executablePath()});
+// Use a non-China device timezone to verify that the schedule still shows Beijing time.
+const context=await browser.newContext({viewport:{width:1440,height:1080},timezoneId:'America/Los_Angeles'}),page=await context.newPage();
+const errors=[];page.on('pageerror',e=>errors.push(e.message));let checks=0;
+function pass(message){console.log('PASS '+(++checks)+': '+message);}
+async function api(path,method='GET',body,token){const r=await context.request.fetch(base+'/api'+path,{method,data:body,headers:token?{Authorization:'Bearer '+token}:{}});assert.ok(r.ok(),path+' '+r.status()+' '+await r.text());return r.json();}
+const admin=(await api('/auth/login','POST',{username:'admin',password:'Admin123!'})).token;
+const username='预约体验'+Date.now().toString(36),password='Release123!';
+await api('/auth/register','POST',{username,password,nickname:'追更体验官'});
+const d=await api('/admin/dramas','POST',{title:'星河来信 · 预约演示',category:'悬疑',description:'一个故事，等待下一封来信。此内容为功能验收演示。',coverImg:'/media/mystery.jpg',videoUrl:'/media/sintel-trailer.mp4'},admin);
+const input=(n)=>({episodeNo:n,title:n===2?'尚未寄出的答案':n===3?'故人的回声':'新的回声',videoUrl:d.videoUrl,publishAt:Date.now()+n*86400000});
+async function plan(n){const r=await api('/admin/dramas/'+d.id+'/release-plans','POST',input(n),admin);return r.find(x=>x.episodeNo===n&&x.status==='SCHEDULED');}
+const p2=await plan(2),p3=await plan(3);
+const reserveName=n=>'预约'+d.title+'第'+n+'集',cancelName=n=>'取消预约'+d.title+'第'+n+'集';
+async function login(name,passw,open=true){if(open)await page.getByRole('button',{name:'登录 / 注册',exact:true}).first().click();await page.getByLabel('用户名',{exact:true}).fill(name);await page.getByLabel('密码',{exact:true}).fill(passw);await page.getByRole('button',{name:'登录幕间',exact:true}).click();await page.getByRole('button',{name:'退出登录'}).waitFor();}
+async function noOverflow(selector='html'){assert.equal(await page.locator(selector).evaluate(el=>el.scrollWidth>el.clientWidth+1),false,selector+' overflow');}
+try{
+  await page.goto(base+'/#following');await page.getByRole('button',{name:'更新日历',exact:true}).click();await page.getByLabel('搜索更新计划').fill('星河来信');await page.getByRole('button',{name:reserveName(2),exact:true}).waitFor();pass('游客可浏览更新日历及搜索');
+  await page.getByRole('button',{name:reserveName(2),exact:true}).click();await page.getByRole('dialog',{name:'登录账号'}).waitFor();await login(username,password,false);await page.getByRole('button',{name:reserveName(2),exact:true}).click();await page.getByRole('button',{name:cancelName(2),exact:true}).waitFor();pass('登录后保留日历位置，预约真实保存');
+  await page.getByRole('button',{name:reserveName(3),exact:true}).click();await page.getByRole('button',{name:cancelName(3),exact:true}).waitFor();
+  await page.getByRole('button',{name:'我的预约',exact:true}).click();await page.getByRole('button',{name:cancelName(2),exact:true}).waitFor();assert.equal(await page.locator('.release-card').count(),2);pass('个人预约列表显示已预约新集');
+  const changed={...input(2),publishAt:Date.now()+86400000};await api('/admin/release-plans/'+p2.id,'PUT',changed,admin);await page.getByRole('button',{name:'刷新排期',exact:true}).click();const expected=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(changed.publishAt);await page.getByText(expected+' 更新',{exact:true}).waitFor();pass('海外时区设备正确显示改期后的北京时间');
+  await api('/admin/release-plans/'+p3.id+'/cancel','POST',undefined,admin);await page.getByRole('button',{name:'刷新排期',exact:true}).click();await page.locator('.release-state.cancelled').waitFor();pass('后台取消后个人预约显示已取消');
+  await page.locator('.toast').waitFor({state:'hidden'});
+  await page.screenshot({path:out+'desktop-reservations.jpg',type:'jpeg',quality:85,fullPage:true});
+  for(const width of [390,320]){await page.setViewportSize({width,height:844});await noOverflow();await page.screenshot({path:out+'mobile-'+width+'-reservations.jpg',type:'jpeg',quality:85,fullPage:true});}pass('390/320像素预约页面无横向溢出');
+  await page.getByRole('button',{name:'更新日历',exact:true}).click();await page.getByLabel('搜索更新计划').fill('星河来信');await page.getByRole('button',{name:cancelName(2),exact:true}).waitFor();await page.screenshot({path:out+'mobile-calendar.jpg',type:'jpeg',quality:85,fullPage:true});await page.setViewportSize({width:1440,height:1080});await page.screenshot({path:out+'desktop-calendar.jpg',type:'jpeg',quality:85,fullPage:true});
+  await page.route('**/api/release-plans',r=>r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'排期暂时不可用，请重试'})}));await page.getByRole('button',{name:'刷新排期',exact:true}).click();await page.getByRole('alert').filter({hasText:'排期暂时不可用'}).waitFor();await page.unroute('**/api/release-plans');await page.getByRole('button',{name:'重试',exact:true}).click();await page.getByRole('alert').waitFor({state:'hidden'});pass('日历加载失败显示中文提示并可重试');
+  await api('/admin/release-plans/'+p2.id+'/publish','POST',undefined,admin);await page.getByRole('button',{name:/打开更新提醒/}).click();await page.getByRole('button',{name:'观看'+d.title+'第2集',exact:true}).waitFor();await page.screenshot({path:out+'desktop-inbox.jpg',type:'jpeg',quality:85,fullPage:true});
+  await page.setViewportSize({width:320,height:844});await noOverflow();await page.screenshot({path:out+'mobile-inbox.jpg',type:'jpeg',quality:85,fullPage:true});pass('新集通知信箱在桌面与手机正确显示');
+  await page.getByRole('button',{name:'观看'+d.title+'第2集',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.current-episode')?.textContent.includes('第 2 集'));pass('点击提醒直接打开对应新集');await page.getByRole('button',{name:'关闭播放器'}).click();
+  await page.getByRole('button',{name:'未读',exact:true}).click();await page.getByRole('heading',{name:'未读提醒都看完了'}).waitFor();await page.getByRole('button',{name:'未读',exact:true}).click();await page.getByRole('heading',{name:'未读提醒都看完了'}).waitFor();pass('打开新集标记已读，重复点当前筛选不会卡加载');
+  await page.getByRole('button',{name:'我的追剧',exact:true}).click();await page.getByRole('button',{name:'我的预约',exact:true}).click();await page.getByRole('button',{name:'观看新集',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.current-episode')?.textContent.includes('第 2 集'));await page.getByRole('button',{name:'关闭播放器'}).click();pass('已发布预约可一键播放');
+  await page.getByRole('button',{name:cancelName(3),exact:true}).click();await page.getByRole('button',{name:cancelName(3),exact:true}).waitFor({state:'hidden'});pass('可移除已取消排期的个人预约');
+  const p4=await plan(4);const userToken=await page.evaluate(()=>sessionStorage.getItem('mujian_token'));await api('/release-plans/'+p4.id+'/reservation','PUT',undefined,userToken);await api('/admin/release-plans/'+p4.id+'/publish','POST',undefined,admin);await page.getByRole('button',{name:/打开更新提醒/}).click();await page.getByRole('button',{name:'全部已读',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.notification-entry')?.getAttribute('aria-label')==='打开更新提醒');pass('全部已读同步清除顶栏未读数');
+  await page.getByRole('button',{name:'退出登录'}).click();await login('admin','Admin123!');await page.getByRole('button',{name:'内容管理',exact:true}).click();await page.getByRole('button',{name:'管理'+d.title+'的分集'}).click();await page.getByLabel('排期标题',{exact:true}).fill('雪落之前');await page.getByLabel('排期集号',{exact:true}).fill('5');await page.getByRole('button',{name:'保存排期',exact:true}).click();await page.getByText('排期已保存，更新日历已同步',{exact:true}).waitFor();let adminPlans=await api('/admin/dramas/'+d.id+'/release-plans','GET',undefined,admin);assert.ok(adminPlans.some(p=>p.episodeNo===5&&p.status==='SCHEDULED'));pass('手机后台可创建持久化排期');
+  await page.getByRole('button',{name:'修改第5集排期'}).click();assert.equal(await page.getByLabel('排期集号',{exact:true}).isDisabled(),true);await page.getByLabel('排期标题',{exact:true}).fill('雪落之后');await page.getByRole('button',{name:'保存排期',exact:true}).click();await page.getByText('排期已保存，更新日历已同步',{exact:true}).waitFor();adminPlans=await api('/admin/dramas/'+d.id+'/release-plans','GET',undefined,admin);assert.equal(adminPlans.find(p=>p.episodeNo===5).title,'雪落之后');pass('编辑排期保留集号并保存修改');
+  await page.getByRole('button',{name:'取消第5集排期'}).click();await page.getByRole('button',{name:'返回',exact:true}).click();await page.getByRole('button',{name:'取消第5集排期'}).click();await page.getByRole('button',{name:'确认取消排期',exact:true}).click();await page.getByText('排期已取消，预约列表会显示取消状态',{exact:true}).waitFor();pass('取消排期有确认并支持返回');
+  await page.getByRole('button',{name:'修改第5集排期'}).click();await page.getByRole('button',{name:'保存排期',exact:true}).click();await page.getByText('排期已保存，更新日历已同步',{exact:true}).waitFor();await page.getByRole('button',{name:'立即发布第5集'}).click();await page.getByRole('button',{name:'确认立即发布',exact:true}).click();await page.getByText('新集已上线，更新提醒已送达站内信箱',{exact:true}).waitFor();assert.ok((await api('/dramas/'+d.id+'/episodes')).some(e=>e.episodeNo===5));pass('恢复排期并通过后台立即发布');
+  await page.locator('.toast').waitFor({state:'hidden'});
+  await noOverflow('.episode-admin-overlay>.modal');await page.locator('.schedule-manager').scrollIntoViewIfNeeded();await page.screenshot({path:out+'mobile-admin-schedule.jpg',type:'jpeg',quality:85});await page.setViewportSize({width:1440,height:1080});await page.locator('.schedule-manager').scrollIntoViewIfNeeded();await page.screenshot({path:out+'desktop-admin-schedule.jpg',type:'jpeg',quality:85});pass('手机排期表单与操作区无横向溢出');
+  assert.deepEqual(errors,[]);pass('浏览器无未捕获异常');console.log(checks+' release browser checks passed.');
+}catch(e){await page.screenshot({path:out+'failure.jpg',fullPage:true});throw e;}finally{await api('/admin/dramas/'+d.id,'DELETE',undefined,admin);await browser.close();}

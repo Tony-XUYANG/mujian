@@ -4,11 +4,11 @@ import { api, count, seriesLabel, type Comment, type Drama, type Episode, type U
 import { Modal } from './Modal';
 import { DOWNLOADS_KEY, downloadKey, readDownloads, type DownloadedDrama } from './downloads';
 
-type Props = { id:number; user:User|null; onClose:()=>void; onLogin:()=>void; toast:(s:string,error?:boolean)=>void; onChange:()=>void };
+type Props = { id:number; initialEpisodeId?:number; user:User|null; onClose:()=>void; onLogin:()=>void; toast:(s:string,error?:boolean)=>void; onChange:()=>void };
 const rates=[0.75,1,1.25,1.5,2];
 function preference(key:string,fallback:string) { try {return localStorage.getItem(key)||fallback;} catch {return fallback;} }
 function remember(key:string,value:string) { try {localStorage.setItem(key,value);} catch { /* Playback still works without storage. */ } }
-export function Player({id,user,onClose,onLogin,toast,onChange}:Props) {
+export function Player({id,initialEpisodeId,user,onClose,onLogin,toast,onChange}:Props) {
   const [drama,setDrama]=useState<Drama|null>(null),[episodes,setEpisodes]=useState<Episode[]>([]),[selected,setSelected]=useState(0);
   const [comments,setComments]=useState<Comment[]>([]),[text,setText]=useState(''),[commentBusy,setCommentBusy]=useState(false);
   const [error,setError]=useState(''),[retry,setRetry]=useState(0),[busy,setBusy]=useState(false),[cacheBusy,setCacheBusy]=useState(false),[offline,setOffline]=useState(false);
@@ -20,10 +20,10 @@ export function Player({id,user,onClose,onLogin,toast,onChange}:Props) {
   useEffect(()=>{
     let active=true;setDrama(null);setError('');setFinished(false);setAutoplay(false);
     Promise.all([api<Drama>('/dramas/'+id),api<Episode[]>('/dramas/'+id+'/episodes'),api<Comment[]>('/dramas/'+id+'/comments')])
-      .then(([d,e,c])=>{if(!active)return;if(!e.length)throw new Error('这部短剧暂时没有可播放的分集');setDrama(d);setEpisodes(e);setComments(c);setSelected(e.find(item=>item.id===d.resumeEpisodeId)?.id||e[0].id);})
+      .then(([d,e,c])=>{if(!active)return;if(!e.length)throw new Error('这部短剧暂时没有可播放的分集');setDrama(d);setEpisodes(e);setComments(c);setSelected(e.find(item=>item.id===initialEpisodeId)?.id||e.find(item=>item.id===d.resumeEpisodeId)?.id||e[0].id);})
       .catch(e=>{if(active)setError(e.message);});
     return()=>{active=false;};
-  },[id,user?.id,retry]);
+  },[id,initialEpisodeId,user?.id,retry]);
   useEffect(()=>{
     let active=true;setOffline(false);
     if(episode&&'caches' in window)caches.open('mujian-offline-v1').then(cache=>cache.match(episode.videoUrl)).then(cached=>{
