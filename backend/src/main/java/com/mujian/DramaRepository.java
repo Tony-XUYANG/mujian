@@ -33,6 +33,46 @@ public class DramaRepository {
         if (favorites) args.add(userId);
         return db.queryForList(sql+" LIMIT 200",args.toArray());
     }
+
+    public List<Map<String,Object>> recommendations(Long userId) {
+        var items = new ArrayList<>(list(userId, "", "", "popular", false));
+        var preference = new HashMap<String, Integer>();
+        if (userId != null) {
+            db.queryForList("""
+                SELECT category, SUM(score) AS score FROM (
+                  SELECT d.category, COUNT(*) * 4 AS score
+                  FROM user_follow f JOIN drama d ON d.id=f.drama_id
+                  WHERE f.user_id=? GROUP BY d.category
+                  UNION ALL
+                  SELECT d.category, COUNT(*) * 3 AS score
+                  FROM user_favorite f JOIN drama d ON d.id=f.drama_id
+                  WHERE f.user_id=? GROUP BY d.category
+                  UNION ALL
+                  SELECT d.category, COUNT(*) AS score
+                  FROM watch_history h JOIN drama d ON d.id=h.drama_id
+                  WHERE h.user_id=? GROUP BY d.category
+                ) preferences GROUP BY category ORDER BY score DESC
+                """, userId, userId, userId).forEach(row -> preference.put(String.valueOf(row.get("category")), ((Number) row.get("score")).intValue()));
+        }
+        int maxPreference = preference.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+        items.forEach(item -> {
+            String category = String.valueOf(item.get("category"));
+            int categoryScore = preference.getOrDefault(category, 0);
+            long views = ((Number) item.getOrDefault("viewCount", 0)).longValue();
+            int score = categoryScore * 100 + (int) Math.min(views, 99_999L) / 100;
+            if (truthy(item.get("followed"))) score += 80;
+            if (truthy(item.get("favorited"))) score += 60;
+            item.put("recommendationScore", score);
+            item.put("recommendationReason", categoryScore > 0
+                ? "因为你喜欢「" + category + "」类故事"
+                : maxPreference == 0 && views > 0 ? "正在热播，很多人正在看" : "为你挑选的新故事");
+        });
+        items.sort(Comparator.comparingInt(item -> -((Number) item.get("recommendationScore")).intValue()));
+        return items.stream().limit(24).toList();
+    }
+    private static boolean truthy(Object value) {
+        return Boolean.TRUE.equals(value) || value instanceof Number n && n.intValue() > 0;
+    }
     public Map<String,Object> detail(long id,Long userId) {
         var rows = db.queryForList(SELECT+" WHERE d.id=?",userId,userId,userId,id);
         if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"这部短剧不存在或已下架");

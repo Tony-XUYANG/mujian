@@ -21,6 +21,9 @@ public class DramaController {
         @RequestParam(defaultValue="") String q,@RequestParam(defaultValue="") String category,@RequestParam(defaultValue="latest") String sort) {
         return dramas.list(userId(jwt),q,category,sort,false);
     }
+    @GetMapping("/recommendations") public List<Map<String,Object>> recommendations(@AuthenticationPrincipal Jwt jwt) {
+        return dramas.recommendations(userId(jwt));
+    }
     @GetMapping("/dramas/{id}") public Map<String,Object> detail(@PathVariable long id,@AuthenticationPrincipal Jwt jwt) {
         return dramas.detail(id,userId(jwt));
     }
