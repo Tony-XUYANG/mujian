@@ -74,6 +74,34 @@ CREATE TABLE IF NOT EXISTS drama_comment (
   INDEX idx_comment_drama_time (drama_id,create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS drama_comment_report (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  comment_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  reason VARCHAR(120) NOT NULL,
+  status VARCHAR(12) NOT NULL DEFAULT 'PENDING',
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_time TIMESTAMP NULL,
+  resolver_id BIGINT NULL,
+  CONSTRAINT uk_comment_report UNIQUE (comment_id,user_id),
+  CONSTRAINT fk_report_comment FOREIGN KEY (comment_id) REFERENCES drama_comment(id) ON DELETE CASCADE,
+  CONSTRAINT fk_report_user FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_report_resolver FOREIGN KEY (resolver_id) REFERENCES `user`(id) ON DELETE SET NULL,
+  CONSTRAINT ck_report_status CHECK (status IN ('PENDING','RESOLVED','DISMISSED')),
+  INDEX idx_report_status (status,create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS drama_comment_moderation (
+  comment_id BIGINT PRIMARY KEY,
+  status VARCHAR(10) NOT NULL DEFAULT 'VISIBLE',
+  reason VARCHAR(120),
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  moderator_id BIGINT NULL,
+  CONSTRAINT fk_moderation_comment FOREIGN KEY (comment_id) REFERENCES drama_comment(id) ON DELETE CASCADE,
+  CONSTRAINT fk_moderation_moderator FOREIGN KEY (moderator_id) REFERENCES `user`(id) ON DELETE SET NULL,
+  CONSTRAINT ck_moderation_status CHECK (status IN ('VISIBLE','HIDDEN'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS drama_series (
   drama_id BIGINT PRIMARY KEY,
   status VARCHAR(12) NOT NULL DEFAULT 'COMPLETED',

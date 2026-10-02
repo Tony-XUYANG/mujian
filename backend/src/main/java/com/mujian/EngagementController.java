@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -28,6 +29,7 @@ public class EngagementController {
     public record Progress(@Min(0) @Max(86400) int progressSec,
                            @Min(0) @Max(86400) int durationSec) {}
     public record Comment(@NotBlank(message = "评论不能为空") @Size(max = 500, message = "评论最多500字") String content) {}
+    public record Report(@NotBlank(message = "请选择举报原因") @Size(max = 120, message = "举报原因过长") String reason) {}
 
     @GetMapping("/me/history")
     public List<Map<String, Object>> history(@AuthenticationPrincipal Jwt jwt) {
@@ -80,7 +82,9 @@ public class EngagementController {
             SELECT c.id,c.content,c.create_time AS createTime,u.nickname,
               LEFT(u.nickname,1) AS avatar
             FROM drama_comment c JOIN `user` u ON u.id=c.user_id
-            WHERE c.drama_id=? ORDER BY c.create_time DESC LIMIT 100
+              LEFT JOIN drama_comment_moderation m ON m.comment_id=c.id
+            WHERE c.drama_id=? AND (m.status IS NULL OR m.status='VISIBLE')
+            ORDER BY c.create_time DESC LIMIT 100
             """, id);
     }
 
@@ -97,5 +101,23 @@ public class EngagementController {
             FROM drama_comment c JOIN `user` u ON u.id=c.user_id
             WHERE c.user_id=? AND c.drama_id=? ORDER BY c.id DESC LIMIT 1
             """, userId, id);
+    }
+
+    @PostMapping("/dramas/{dramaId}/comments/{commentId}/reports")
+    public Map<String, Boolean> report(@PathVariable long dramaId, @PathVariable long commentId,
+                                       @Valid @RequestBody Report input,
+                                       @AuthenticationPrincipal Jwt jwt) {
+        dramas.require(dramaId);
+        if (db.queryForObject("SELECT COUNT(*) FROM drama_comment WHERE id=? AND drama_id=?", Integer.class, commentId, dramaId) == 0)
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "评论不存在或已下架");
+        if (!Set.of("不友善或攻击他人", "广告或无关内容", "剧透或违规内容", "其他问题").contains(input.reason()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择有效的举报原因");
+        long userId = DramaController.userId(jwt);
+        db.update("""
+            INSERT INTO drama_comment_report(comment_id,user_id,reason,status,resolved_time,resolver_id)
+            VALUES (?,?,?,'PENDING',NULL,NULL)
+            ON DUPLICATE KEY UPDATE reason=VALUES(reason),status='PENDING',resolved_time=NULL,resolver_id=NULL,create_time=CURRENT_TIMESTAMP
+            """, commentId, userId, input.reason());
+        return Map.of("reported", true);
     }
 }

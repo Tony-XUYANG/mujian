@@ -40,6 +40,10 @@ try {
   const views=await request(`/dramas/${id}/view`,'POST');check('播放计数更新',views.status===200&&views.data.viewCount===1);
   const commentsOpen=await request(`/dramas/${id}/comments`);check('匿名可查看剧友评论',commentsOpen.status===200&&Array.isArray(commentsOpen.data));
   const comment=await request(`/dramas/${id}/comments`,'POST',{content:'验收评论：节奏很舒服。'},token);check('登录用户发表评论',comment.status===201&&comment.data.content.includes('节奏'));
+  const report=await request(`/dramas/${id}/comments/${comment.data.id}/reports`,'POST',{reason:'剧透或违规内容'},token);check('用户举报评论',report.status===200&&report.data.reported===true);
+  const pendingReports=await request('/admin/comment-reports?status=PENDING','GET',undefined,adminToken);const pendingReport=pendingReports.data.find(r=>r.commentId===comment.data.id);check('管理员查看待处理举报',pendingReports.status===200&&pendingReport?.status==='PENDING');
+  const hidden=pendingReport?await request('/admin/comment-reports/'+pendingReport.id+'/resolve','POST',{action:'HIDE'},adminToken):{status:0,data:{}};const hiddenComments=await request(`/dramas/${id}/comments`);check('管理员隐藏违规评论',hidden.status===200&&hidden.data.hidden===true&&!hiddenComments.data.some(c=>c.id===comment.data.id));
+  const restored=await request('/admin/comments/'+comment.data.id+'/restore','POST',undefined,adminToken);const visibleComments=await request(`/dramas/${id}/comments`);check('管理员恢复评论显示',restored.status===200&&restored.data.restored===true&&visibleComments.data.some(c=>c.id===comment.data.id));
   const progress=await request(`/dramas/${id}/progress`,'PUT',{progressSec:12,durationSec:60},token);check('观看进度同步',progress.status===200&&progress.data.progressSec===12);
   const resumed=await request('/dramas/'+id,'GET',undefined,token);check('详情返回上次观看位置',resumed.status===200&&resumed.data.progressSec===12&&resumed.data.durationSec===60);
   const history=await request('/me/history','GET',undefined,token);check('继续观看历史',history.status===200&&history.data.some(d=>d.id===id&&d.progressSec===12));
