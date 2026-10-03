@@ -22,9 +22,9 @@ public class AdminController {
     public AdminController(JdbcTemplate db,DramaRepository dramas) {this.db=db;this.dramas=dramas;}
     public record Input(
         @NotBlank(message="请输入短剧标题") @Size(max=80,message="标题最多80字") String title,
-        @NotBlank(message="请输入封面地址") @Size(max=1000) String coverImg,
+        @NotBlank(message="请输入封面地址") @Size(max=1000,message="封面地址最多1000字") String coverImg,
         @NotBlank(message="请输入短剧简介") @Size(max=2000,message="简介最多2000字") String description,
-        @NotBlank(message="请输入视频地址") @Size(max=1000) String videoUrl,
+        @NotBlank(message="请输入视频地址") @Size(max=1000,message="视频地址最多1000字") String videoUrl,
         @NotBlank(message="请选择分类") String category) {}
     public record ReportAction(@NotBlank(message="请选择处理方式") String action) {}
     @GetMapping("/stats") public Map<String,Object> stats() {

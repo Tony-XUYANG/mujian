@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { AlertCircle, ArrowUpRight, Bookmark, Camera, Check, History, LoaderCircle, Pencil, Search, Trash2, UserRound, X } from 'lucide-react';
+import { ShoppingBag, Store, Clapperboard, Flame, LayoutDashboard, AlertCircle, ArrowUpRight, Bookmark, Camera, Check, History, LoaderCircle, Pencil, Search, Trash2, UserRound, X } from 'lucide-react';
 import { api, type Drama, type User } from './api';
 import { Modal } from './Modal';
 import { ProfileImageEditor, type ProfileImageKind } from './ProfileImageEditor';
@@ -108,6 +108,7 @@ export function Profile({ user, onLogin, onNavigate, onView, onUserUpdated, toas
       <div className="profile-stats"><button className={`profile-stat ${tab === 'favorites' ? 'active' : ''}`} onClick={() => changeTab('favorites')}><strong>{loading ? '—' : favorites.length}</strong><span>我的收藏</span></button><button className={`profile-stat ${tab === 'history' ? 'active' : ''}`} onClick={() => changeTab('history')}><strong>{loading ? '—' : history.length}</strong><span>观看记录</span></button></div>
       <button className="profile-edit" onClick={() => setEditing(true)}><Pencil size={15} />编辑资料</button>
     </div>
+    <section className="profile-commerce" aria-label="购物与店铺"><button onClick={()=>onNavigate('orders')}><ShoppingBag size={22}/><span>我的订单</span></button><button onClick={()=>onNavigate('merchant')}><Store size={22}/><span>我的店铺 / 开店</span></button><button onClick={()=>onNavigate('merchant/videos')}><Clapperboard size={22}/><span>视频带货</span></button></section><div className="profile-extra-links"><button onClick={()=>onNavigate('popular')}><Flame size={15}/>人气榜单</button>{user.role==='ADMIN'&&<button onClick={()=>onNavigate('admin')}><LayoutDashboard size={15}/>内容管理</button>}</div>
     <section className="profile-library"><button className="profile-follow-entry" onClick={()=>onNavigate('following')}><Bookmark size={19}/><span>我的追剧<small>查看连载更新，继续未看完的故事</small></span><ArrowUpRight size={17}/></button>
       <div className="profile-tabs" role="tablist" aria-label="个人片单">{(['history', 'favorites'] as const).map(value => <button key={value} id={`profile-tab-${value}`} role="tab" aria-selected={tab === value} aria-controls="profile-panel" tabIndex={tab === value ? 0 : -1} className={tab === value ? 'selected' : ''} onKeyDown={tabKey} onClick={() => changeTab(value)}>{value === 'history' ? <History size={16} /> : <Bookmark size={16} />}{value === 'history' ? '观看记录' : '我的收藏'}</button>)}</div>
       <div id="profile-panel" role="tabpanel" aria-labelledby={`profile-tab-${tab}`} aria-busy={loading}>

@@ -182,3 +182,87 @@ CREATE TABLE IF NOT EXISTS user_notification (
   CONSTRAINT fk_notification_episode FOREIGN KEY (episode_id) REFERENCES drama_episode(id) ON DELETE CASCADE,
   INDEX idx_notification_inbox (user_id,read_at,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Merchant storefronts and shoppable video products.
+CREATE TABLE IF NOT EXISTS shop (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  owner_id BIGINT NOT NULL,
+  name VARCHAR(80) NOT NULL,
+  logo_url VARCHAR(1000),
+  description VARCHAR(500),
+  status VARCHAR(12) NOT NULL DEFAULT 'ACTIVE',
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT uk_shop_owner UNIQUE (owner_id),
+  CONSTRAINT fk_shop_owner FOREIGN KEY (owner_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT ck_shop_status CHECK (status IN ('ACTIVE','CLOSED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS shop_product (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  shop_id BIGINT NOT NULL,
+  name VARCHAR(120) NOT NULL,
+  image_url VARCHAR(1000),
+  description VARCHAR(500),
+  price DECIMAL(10,2) NOT NULL,
+  stock INT NOT NULL DEFAULT 0,
+  version BIGINT NOT NULL DEFAULT 0,
+  status VARCHAR(12) NOT NULL DEFAULT 'ON_SALE',
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_product_shop FOREIGN KEY (shop_id) REFERENCES shop(id) ON DELETE CASCADE,
+  CONSTRAINT ck_product_price CHECK (price >= 0),
+  CONSTRAINT ck_product_stock CHECK (stock >= 0),
+  CONSTRAINT ck_product_status CHECK (status IN ('ON_SALE','OFF_SALE')),
+  INDEX idx_product_shop_status (shop_id,status,create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS drama_product (
+  drama_id BIGINT NOT NULL,
+  product_id BIGINT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (drama_id,product_id),
+  CONSTRAINT fk_drama_product_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
+  CONSTRAINT fk_drama_product_product FOREIGN KEY (product_id) REFERENCES shop_product(id) ON DELETE CASCADE,
+  INDEX idx_drama_product_order (drama_id,sort_order,product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS shop_order (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  order_no VARCHAR(32) NOT NULL,
+  buyer_id BIGINT NOT NULL,
+  shop_id BIGINT NOT NULL,
+  product_id BIGINT NOT NULL,
+  quantity INT NOT NULL,
+  unit_price DECIMAL(10,2) NOT NULL,
+  total_amount DECIMAL(12,2) NOT NULL,
+  request_key VARCHAR(64) NOT NULL,
+  product_name VARCHAR(120) NOT NULL,
+  image_url VARCHAR(1000),
+  recipient VARCHAR(40) NOT NULL,
+  phone VARCHAR(24) NOT NULL,
+  address VARCHAR(300) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+  expires_at TIMESTAMP NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT uk_shop_order_no UNIQUE (order_no),
+  CONSTRAINT uk_order_request UNIQUE (buyer_id,request_key),
+  CONSTRAINT fk_order_buyer FOREIGN KEY (buyer_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_order_shop FOREIGN KEY (shop_id) REFERENCES shop(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_order_product FOREIGN KEY (product_id) REFERENCES shop_product(id) ON DELETE RESTRICT,
+  CONSTRAINT ck_order_quantity CHECK (quantity BETWEEN 1 AND 99),
+  CONSTRAINT ck_order_amount CHECK (unit_price >= 0 AND total_amount >= 0),
+  CONSTRAINT ck_order_status CHECK (status IN ('PENDING','PAID','SHIPPED','COMPLETED','CANCELLED')),
+  INDEX idx_order_expiry (status,expires_at),
+  INDEX idx_order_buyer (buyer_id,create_time),
+  INDEX idx_order_shop (shop_id,status,create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS shop_video (
+  drama_id BIGINT PRIMARY KEY,
+  shop_id BIGINT NOT NULL,
+  CONSTRAINT fk_shop_video_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
+  CONSTRAINT fk_shop_video_shop FOREIGN KEY (shop_id) REFERENCES shop(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

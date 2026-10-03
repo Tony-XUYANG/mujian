@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { AlertCircle, ArrowUpRight, Bell, Bookmark, Download, Eye, Film, Flag, Heart, History, ListVideo, LoaderCircle, MessageCircle, PictureInPicture2, Play, Share2, SkipBack, SkipForward, X } from 'lucide-react';
 import { api, count, seriesLabel, type Comment, type Drama, type Episode, type User } from './api';
+import { VideoProducts } from './Commerce';
 import { Modal } from './Modal';
 import { DOWNLOADS_KEY, downloadKey, readDownloads, type DownloadedDrama } from './downloads';
 
-type Props = { id:number; initialEpisodeId?:number; user:User|null; onClose:()=>void; onLogin:()=>void; toast:(s:string,error?:boolean)=>void; onChange:()=>void };
+type Props = { onNavigate:(path:string)=>void; id:number; initialEpisodeId?:number; user:User|null; onClose:()=>void; onLogin:()=>void; toast:(s:string,error?:boolean)=>void; onChange:()=>void };
 const rates=[0.75,1,1.25,1.5,2];
 function preference(key:string,fallback:string) { try {return localStorage.getItem(key)||fallback;} catch {return fallback;} }
 function remember(key:string,value:string) { try {localStorage.setItem(key,value);} catch { /* Playback still works without storage. */ } }
-export function Player({id,initialEpisodeId,user,onClose,onLogin,toast,onChange}:Props) {
+export function Player({onNavigate,id,initialEpisodeId,user,onClose,onLogin,toast,onChange}:Props) {
   const [drama,setDrama]=useState<Drama|null>(null),[episodes,setEpisodes]=useState<Episode[]>([]),[selected,setSelected]=useState(0);
   const [comments,setComments]=useState<Comment[]>([]),[text,setText]=useState(''),[commentBusy,setCommentBusy]=useState(false),[reporting,setReporting]=useState<number|null>(null),[reportReason,setReportReason]=useState('不友善或攻击他人'),[reportBusy,setReportBusy]=useState(false);
   const [error,setError]=useState(''),[retry,setRetry]=useState(0),[busy,setBusy]=useState(false),[cacheBusy,setCacheBusy]=useState(false),[offline,setOffline]=useState(false);
@@ -78,6 +79,7 @@ export function Player({id,initialEpisodeId,user,onClose,onLogin,toast,onChange}
     <div className="player-top"><span><Film size={17}/> 幕间放映室</span><div className="player-tools"><button className="icon-button" aria-label="分享短剧" onClick={share}><Share2 size={17}/></button><button className="icon-button" aria-label="关闭播放器" onClick={onClose}><X/></button></div></div>
     {error?<div className="empty"><AlertCircle/><p>{error}</p><button className="secondary" onClick={()=>setRetry(n=>n+1)}>重新加载</button></div>:!drama||!episode?<div className="empty"><LoaderCircle className="spin"/>正在准备故事…</div>:<>
       <EpisodeVideo key={episode.id+':'+(user?.id||0)} episode={episode} poster={drama.coverImg} rate={rate} autoplay={autoplay} user={user} bind={v=>{videoRef.current=v;}} onSave={persist} onPlay={view} onEnded={ended}/>
+      <VideoProducts id={id} onNavigate={onNavigate}/>
       <div className="playback-toolbar"><button className="icon-button" aria-label="上一集" disabled={index<=0} onClick={()=>choose(episodes[index-1])}><SkipBack size={18}/></button><span className="current-episode">第 {episode.episodeNo} 集<span>{episode.title}</span></span><button className="icon-button" aria-label="下一集" disabled={index>=episodes.length-1} onClick={()=>choose(episodes[index+1])}><SkipForward size={18}/></button><label className="rate-control">倍速<select aria-label="播放倍速" value={rate} onChange={e=>{const n=Number(e.target.value);setRate(n);remember('mujian_rate',String(n));}}>{rates.map(n=><option value={n} key={n}>{n}×</option>)}</select></label><button className="secondary pip-button" onClick={pip}><PictureInPicture2 size={16}/>小窗</button></div>
       <div className="player-info">
         <div className="player-heading"><div><span className="small-tag">{drama.category}</span><h2>{drama.title}</h2><p className="series-meta">{seriesLabel(drama)}</p></div><button className={drama.followed?'secondary is-liked':'primary'} disabled={busy} aria-pressed={Boolean(drama.followed)} onClick={()=>interact('follow')}><Bell size={16}/>{drama.followed?'已追剧':'追剧'}</button></div>
