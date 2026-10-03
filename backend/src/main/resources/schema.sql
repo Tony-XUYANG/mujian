@@ -266,3 +266,79 @@ CREATE TABLE IF NOT EXISTS shop_video (
   CONSTRAINT fk_shop_video_drama FOREIGN KEY (drama_id) REFERENCES drama(id) ON DELETE CASCADE,
   CONSTRAINT fk_shop_video_shop FOREIGN KEY (shop_id) REFERENCES shop(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Detailed shopping experience; additive tables preserve existing orders.
+CREATE TABLE IF NOT EXISTS shop_product_detail (
+  product_id BIGINT PRIMARY KEY,
+  category VARCHAR(30) NOT NULL DEFAULT '生活日用',
+  material VARCHAR(100) NOT NULL DEFAULT '',
+  specification VARCHAR(100) NOT NULL DEFAULT '',
+  origin VARCHAR(80) NOT NULL DEFAULT '',
+  shipping_from VARCHAR(80) NOT NULL DEFAULT '',
+  detail_text VARCHAR(4000) NOT NULL DEFAULT '',
+  image_urls JSON NOT NULL,
+  FOREIGN KEY (product_id) REFERENCES shop_product(id) ON DELETE CASCADE,
+  INDEX idx_detail_category (category,product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS shopping_cart (
+  user_id BIGINT NOT NULL,
+  product_id BIGINT NOT NULL,
+  quantity INT NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id,product_id),
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES shop_product(id) ON DELETE CASCADE,
+  CHECK (quantity BETWEEN 1 AND 99)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS shipping_address (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  recipient VARCHAR(40) NOT NULL,
+  phone VARCHAR(24) NOT NULL,
+  region VARCHAR(100) NOT NULL,
+  detail VARCHAR(180) NOT NULL,
+  label VARCHAR(12) NOT NULL DEFAULT '家',
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  INDEX idx_address_user (user_id,is_default,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS product_favorite (
+  user_id BIGINT NOT NULL,
+  product_id BIGINT NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id,product_id),
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES shop_product(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS checkout_batch (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  buyer_id BIGINT NOT NULL,
+  request_key VARCHAR(64) NOT NULL,
+  payload_hash CHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_checkout_request (buyer_id,request_key),
+  FOREIGN KEY (buyer_id) REFERENCES `user`(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS checkout_batch_item (
+  batch_id BIGINT NOT NULL,
+  order_no VARCHAR(32) NOT NULL,
+  PRIMARY KEY (batch_id,order_no),
+  UNIQUE KEY uk_checkout_order (order_no),
+  FOREIGN KEY (batch_id) REFERENCES checkout_batch(id) ON DELETE CASCADE,
+  FOREIGN KEY (order_no) REFERENCES shop_order(order_no) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS shop_order_event (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  order_no VARCHAR(32) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  description VARCHAR(100) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_no) REFERENCES shop_order(order_no) ON DELETE CASCADE,
+  INDEX idx_order_event (order_no,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

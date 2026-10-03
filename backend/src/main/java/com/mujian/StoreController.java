@@ -20,13 +20,20 @@ import org.springframework.web.server.ResponseStatusException;
 public class StoreController {
     private final JdbcTemplate db;
     private final DramaRepository dramas;
-    private static final String PRODUCT = """
+    private final ProductDetails details;
+    static final String PRODUCT = """
         SELECT p.id,p.name,p.image_url AS imageUrl,p.description,p.price,p.stock,p.status,p.version,
-          s.id AS shopId,s.name AS shopName,s.logo_url AS shopLogoUrl
+          s.id AS shopId,s.name AS shopName,s.logo_url AS shopLogoUrl,
+          COALESCE(pd.category,'生活日用') AS category,COALESCE(pd.material,'') AS material,
+          COALESCE(pd.specification,'') AS specification,COALESCE(pd.origin,'') AS origin,
+          COALESCE(pd.shipping_from,'') AS shippingFrom,COALESCE(pd.detail_text,'') AS detailText,
+          COALESCE(CAST(pd.image_urls AS CHAR),'[]') AS imagesJson,
+          (SELECT COALESCE(SUM(o.quantity),0) FROM shop_order o WHERE o.product_id=p.id AND o.status='COMPLETED') AS soldCount
         FROM shop_product p JOIN shop s ON s.id=p.shop_id
+        LEFT JOIN shop_product_detail pd ON pd.product_id=p.id
         """;
     private static final String SHOP = "SELECT id,name,logo_url AS logoUrl,description,status FROM shop ";
-    public StoreController(JdbcTemplate db, DramaRepository dramas) { this.db=db; this.dramas=dramas; }
+    public StoreController(JdbcTemplate db, DramaRepository dramas,ProductDetails details) { this.db=db; this.dramas=dramas; this.details=details; }
 
     public record ShopInput(
         @NotBlank(message="请输入店铺名称") @Size(max=80,message="店铺名称最多80字") String name,
@@ -38,7 +45,8 @@ public class StoreController {
         @Size(max=500,message="商品简介最多500字") String description,
         @NotNull(message="请输入商品价格") @DecimalMin(value="0.01",message="价格需大于0") @Digits(integer=8,fraction=2,message="价格最多两位小数") BigDecimal price,
         @NotNull(message="请输入库存") @Min(value=0,message="库存不能为负数") @Max(value=999999,message="库存不能超过999999") Integer stock,
-        @PositiveOrZero(message="商品版本不正确") Long version) {}
+        @PositiveOrZero(message="商品版本不正确") Long version,
+        @Valid ProductDetails.Input details) {}
     public record SaleInput(@NotNull(message="请选择上下架状态") Boolean onSale) {}
     public record ProductLinks(@NotNull(message="请选择商品") @Size(max=6,message="最多挂载6件商品") List<@NotNull(message="商品编号不能为空") Long> productIds) {}
     public record VideoInput(@NotNull(message="请填写视频信息") @Valid AdminController.Input video,
@@ -46,12 +54,19 @@ public class StoreController {
 
     @GetMapping("/mall/products")
     public List<Map<String,Object>> products(@RequestParam(defaultValue="") String q,
-            @RequestParam(required=false) Long shopId, @RequestParam(defaultValue="latest") String sort) {
+            @RequestParam(required=false) Long shopId, @RequestParam(defaultValue="latest") String sort,
+            @RequestParam(defaultValue="") String category,@RequestParam(defaultValue="0") int page,
+            @RequestParam(defaultValue="24") int size,@RequestParam(defaultValue="false") boolean inStock,
+            @RequestParam(required=false) BigDecimal minPrice,@RequestParam(required=false) BigDecimal maxPrice) {
         if(q.length()>100) throw bad("搜索关键词最多100字");
+        if(page<0||page>10000||size<1||size>100)throw bad("分页参数不正确");
+        if(!category.isEmpty()&&!ProductDetails.CATEGORIES.contains(category))throw bad("请选择有效商品分类");
+        if((minPrice!=null&&minPrice.signum()<0)||(maxPrice!=null&&maxPrice.signum()<0)||(minPrice!=null&&maxPrice!=null&&minPrice.compareTo(maxPrice)>0))throw bad("价格区间不正确");
         String order=switch(sort) { case "priceAsc" -> "p.price,p.id DESC"; case "priceDesc" -> "p.price DESC,p.id DESC";
+            case "sales" -> "soldCount DESC,p.id DESC";
             case "latest" -> "p.id DESC"; default -> throw bad("请选择有效排序方式"); };
-        return db.queryForList(PRODUCT+" WHERE p.status='ON_SALE' AND s.status='ACTIVE' AND (? IS NULL OR s.id=?) AND (?='' OR p.name LIKE CONCAT('%',?,'%')) ORDER BY "+order+" LIMIT 100",
-            shopId,shopId,q.trim(),q.trim());
+        return db.queryForList(PRODUCT+" WHERE p.status='ON_SALE' AND s.status='ACTIVE' AND (? IS NULL OR s.id=?) AND (?='' OR p.name LIKE CONCAT('%',?,'%') OR p.description LIKE CONCAT('%',?,'%')) AND (?='' OR COALESCE(pd.category,'生活日用')=?) AND (?=false OR p.stock>0) AND (? IS NULL OR p.price>=?) AND (? IS NULL OR p.price<=?) ORDER BY "+order+" LIMIT ? OFFSET ?",
+            shopId,shopId,q.trim(),q.trim(),q.trim(),category,category,inStock,minPrice,minPrice,maxPrice,maxPrice,size,page*size);
     }
     @GetMapping("/mall/products/{id}")
     public Map<String,Object> product(@PathVariable long id) { return productRow(id,false); }
@@ -89,18 +104,20 @@ public class StoreController {
     }
     @GetMapping("/shop/products")
     public List<Map<String,Object>> myProducts(@AuthenticationPrincipal Jwt jwt) { return productsForShop(ownerShopId(jwt),true); }
-    @PostMapping("/shop/products") @ResponseStatus(HttpStatus.CREATED)
+    @PostMapping("/shop/products") @ResponseStatus(HttpStatus.CREATED) @Transactional
     public Map<String,Object> addProduct(@Valid @RequestBody ProductInput in,@AuthenticationPrincipal Jwt jwt) {
         long shopId=ownerShopId(jwt);optionalUrl(in.imageUrl());
         long id=insert("INSERT INTO shop_product(shop_id,name,image_url,description,price,stock) VALUES (?,?,?,?,?,?)",shopId,in.name().trim(),clean(in.imageUrl()),clean(in.description()),in.price(),in.stock());
+        details.save(id,in.details());
         return productRow(id,true);
     }
-    @PatchMapping("/shop/products/{id}")
+    @PatchMapping("/shop/products/{id}") @Transactional
     public Map<String,Object> updateProduct(@PathVariable long id,@Valid @RequestBody ProductInput in,@AuthenticationPrincipal Jwt jwt) {
         long shopId=ownerShopId(jwt);optionalUrl(in.imageUrl());requireProduct(id,shopId);
         if(in.version()==null)throw bad("请刷新商品资料后再编辑");
         if(db.update("UPDATE shop_product SET name=?,image_url=?,description=?,price=?,stock=?,version=version+1 WHERE id=? AND shop_id=? AND version=?",in.name().trim(),clean(in.imageUrl()),clean(in.description()),in.price(),in.stock(),id,shopId,in.version())==0)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"商品或库存已变化，请关闭表单并刷新后重试");
+        details.save(id,in.details());
         return productRow(id,true);
     }
     @PutMapping("/shop/products/{id}/status")

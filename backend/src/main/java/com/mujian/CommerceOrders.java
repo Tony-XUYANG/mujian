@@ -39,6 +39,7 @@ public class CommerceOrders {
         if(!"ON_SALE".equals(p.get("status"))||!"ACTIVE".equals(shopStatus))throw conflict("商品已下架或店铺已关闭");
         if(number(p,"stock")<in.quantity())throw conflict("库存不足，请减少购买数量");
         BigDecimal unit=(BigDecimal)p.get("price");
+        if(in.expectedPrice()!=null&&unit.compareTo(in.expectedPrice())!=0)throw conflict("商品价格已变化，请刷新商品页后重新确认");
         String no="MJ"+UUID.randomUUID().toString().replace("-","").substring(0,26).toUpperCase(Locale.ROOT);
         db.update("UPDATE shop_product SET stock=stock-?,version=version+1 WHERE id=?",in.quantity(),productId);
         db.update("""
@@ -47,10 +48,18 @@ public class CommerceOrders {
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 15 MINUTE))
             """,no,buyer,p.get("shop_id"),productId,in.quantity(),unit,unit.multiply(BigDecimal.valueOf(in.quantity())),
             in.requestKey(),p.get("name"),p.get("image_url"),in.recipient().trim(),in.phone().trim(),in.address().trim());
+        event(no,"PENDING","订单已提交，保留库存15分钟");
         return row(no);
     }
     public List<Map<String,Object>> list(long user,boolean seller) {
         return db.queryForList(SELECT+(seller?" WHERE s.owner_id=?":" WHERE o.buyer_id=?")+" ORDER BY o.id DESC LIMIT 100",user);
+    }
+    public Map<String,Object> detail(long user,String no,boolean seller) {
+        var rows=db.queryForList(SELECT+" WHERE o.order_no=? AND "+(seller?"s.owner_id=?":"o.buyer_id=?"),no,user);
+        if(rows.isEmpty())throw missing();
+        var result=rows.getFirst();
+        result.put("events",db.queryForList("SELECT status,description,created_at AS createTime FROM shop_order_event WHERE order_no=? ORDER BY id",no));
+        return result;
     }
     @Transactional
     public Map<String,Object> action(long user,String no,String action) {
@@ -62,7 +71,7 @@ public class CommerceOrders {
         if(owner!=user)throw missing();
         String current=(String)o.get("status");
         if("PENDING".equals(current)&&expired(o)) {
-            cancel(o);
+            cancel(o,"未付款超时，库存已释放");
             // 返回取消状态以提交超时返库事务，由客户端显示状态，避免抛异常回滚。
             return row(no);
         }
@@ -70,19 +79,26 @@ public class CommerceOrders {
         String target=switch(action){case "pay"->"PAID";case "cancel"->"CANCELLED";case "ship"->"SHIPPED";default->"COMPLETED";};
         if(current.equals(target))return row(no);
         if(!current.equals(expected))throw conflict("订单状态已变化，请刷新后重试");
-        if(action.equals("cancel"))cancel(o);
-        else db.update("UPDATE shop_order SET status=? WHERE id=?",target,o.get("id"));
+        if(action.equals("cancel"))cancel(o,"买家取消订单，库存已释放");
+        else {
+            db.update("UPDATE shop_order SET status=? WHERE id=?",target,o.get("id"));
+            event(no,target,switch(action){case "pay"->"模拟支付完成，未发生真实扣款";case "ship"->"店主已标记演示发货，无真实物流";default->"买家已确认收货";});
+        }
         return row(no);
     }
     @Transactional
     public void expirePending() {
         var rows=db.queryForList("SELECT * FROM shop_order WHERE status='PENDING' AND expires_at<=CURRENT_TIMESTAMP ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED");
-        for(var row:rows)cancel(row);
+        // 与多商品结算保持商品锁顺序一致。
+        rows.sort(Comparator.comparingLong(o->number(o,"product_id")));
+        for(var row:rows)cancel(row,"未付款超时，库存已释放");
     }
-    private void cancel(Map<String,Object> o) {
+    private void cancel(Map<String,Object> o,String reason) {
         db.update("UPDATE shop_order SET status='CANCELLED' WHERE id=?",o.get("id"));
         db.update("UPDATE shop_product SET stock=stock+?,version=version+1 WHERE id=?",o.get("quantity"),o.get("product_id"));
+        event((String)o.get("order_no"),"CANCELLED",reason);
     }
+    private void event(String no,String status,String message){db.update("INSERT INTO shop_order_event(order_no,status,description) VALUES (?,?,?)",no,status,message);}
     private boolean expired(Map<String,Object> o) {
         return db.queryForObject("SELECT expires_at<=CURRENT_TIMESTAMP FROM shop_order WHERE id=?",Boolean.class,o.get("id"));
     }

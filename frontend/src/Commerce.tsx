@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
+  Heart,
+  MapPin,
   ArrowLeft,
   ChevronRight,
   Package,
@@ -10,6 +12,14 @@ import {
 } from "lucide-react";
 import { api, type User } from "./api";
 import { Modal } from "./Modal";
+import {
+  ProductShopping,
+  ShoppingEntry,
+  productCategories,
+  OrderDetail,
+  AddressPicker,
+  ProductGallery,
+} from "./Shopping";
 
 export type Product = {
   id: number;
@@ -22,6 +32,14 @@ export type Product = {
   version: number;
   shopId: number;
   shopName: string;
+  category?: string;
+  material?: string;
+  specification?: string;
+  origin?: string;
+  shippingFrom?: string;
+  detailText?: string;
+  imagesJson?: string;
+  soldCount?: number;
 };
 export type Shop = {
   id: number;
@@ -135,7 +153,7 @@ export function CommerceLogin({ onLogin }: { onLogin: () => void }) {
     </div>
   );
 }
-function ProductGrid({
+export function ProductGrid({
   products,
   onNavigate,
 }: {
@@ -152,11 +170,18 @@ function ProductGrid({
         >
           <div className="product-picture">
             <ProductImage src={p.imageUrl} name={p.name} />
-            {p.stock === 0 && <span className="stock-badge">暂时售罄</span>}
+            {(p.stock === 0 || p.status !== "ON_SALE") && (
+              <span className="stock-badge">
+                {p.status !== "ON_SALE" ? "已下架" : "暂时售罄"}
+              </span>
+            )}
           </div>
           <div className="product-copy">
             <small>{p.shopName}</small>
             <h3>{p.name}</h3>
+            <p className="product-card-meta">
+              {p.category || "生活日用"} · 已售 {p.soldCount || 0}
+            </p>
             <div>
               <strong className="price">¥ {money(p.price)}</strong>
               <span>
@@ -175,58 +200,131 @@ function ProductGrid({
     </div>
   );
 }
-export function Mall({ onNavigate }: CommerceProps) {
+export function Mall(props: CommerceProps) {
   const [query, setQuery] = useState(""),
     [search, setSearch] = useState(""),
     [sort, setSort] = useState("latest"),
-    [retry, setRetry] = useState(0);
+    [category, setCategory] = useState(""),
+    [stockOnly, setStockOnly] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setSearch(query.trim()), 250);
     return () => clearTimeout(timer);
   }, [query]);
-  const { data, error, loading } = useRemote<Product[]>(
-    "/mall/products?q=" + encodeURIComponent(search) + "&sort=" + sort,
-    retry,
-  );
+  const path =
+    "/mall/products?q=" +
+    encodeURIComponent(search) +
+    "&sort=" +
+    sort +
+    "&category=" +
+    encodeURIComponent(category) +
+    "&inStock=" +
+    stockOnly;
+  const marks = ["杯", "香", "袋", "书", "数", "物"];
   return (
-    <section className="commerce-page">
+    <section className="commerce-page mall-rich">
       <div className="commerce-heading">
         <div>
-          <p className="eyebrow">故事之外，也有好物</p>
+          <p className="eyebrow">好故事，也有好生活</p>
           <h1>
-            幕间商城<span>把心动带回家</span>
+            幕间商城<span>把喜欢，带进日常</span>
           </h1>
         </div>
-        <button className="secondary" onClick={() => onNavigate("orders")}>
-          <ShoppingBag size={17} />
-          我的订单
+        <ShoppingEntry {...props} />
+      </div>
+      <div className="mall-utility">
+        <button onClick={() => props.onNavigate("orders")}>
+          <ShoppingBag size={18} />
+          <span>我的订单</span>
+          <ChevronRight size={14} />
+        </button>
+        <button onClick={() => props.onNavigate("product-favorites")}>
+          <Heart size={18} />
+          <span>好物收藏</span>
+          <ChevronRight size={14} />
+        </button>
+        <button onClick={() => props.onNavigate("addresses")}>
+          <MapPin size={18} />
+          <span>收货地址</span>
+          <ChevronRight size={14} />
         </button>
       </div>
-      <div className="mall-banner">
-        <div>
-          <span className="small-tag">幕间生活提案</span>
+      <div className="mall-discovery">
+        <div className="mall-editorial">
+          <span>幕间生活提案 · 01</span>
           <h2>
-            看见喜欢，
+            把日子，
             <br />
-            让故事走进生活。
+            过成喜欢的模样。
           </h2>
-          <p>从视频里的小店，到身边的日常好物。</p>
+          <p>一杯热饮，一缕木香，一场好故事。</p>
+          <button onClick={() => setCategory("生活日用")}>
+            发现日常好物 <ChevronRight size={16} />
+          </button>
+          <img src="/media/shop-cup.svg" alt="陶瓷杯生活提案" />
         </div>
-        <ShoppingBag size={98} strokeWidth={1} />
+        <div className="mall-scenes">
+          <button onClick={() => setCategory("家居香氛")}>
+            <span>
+              <small>放松时刻</small>
+              <strong>今晚，慢一点</strong>
+              <em>
+                家居香氛 <ChevronRight size={13} />
+              </em>
+            </span>
+            <img src="/media/shop-candle.svg" alt="香氛好物" />
+          </button>
+          <button onClick={() => setCategory("文具书籍")}>
+            <span>
+              <small>灵感日常</small>
+              <strong>记下心动的一句</strong>
+              <em>
+                文具书籍 <ChevronRight size={13} />
+              </em>
+            </span>
+            <img src="/media/shop-book.svg" alt="文具好物" />
+          </button>
+        </div>
       </div>
-      <p className="commerce-note">
-        演示商城 · 体验选购与订单流程，模拟支付不产生真实扣款。
-      </p>
+      <div className="mall-category-icons" aria-label="商品分类入口">
+        {productCategories.map((c, i) => (
+          <button
+            className={category === c ? "selected" : ""}
+            key={c}
+            onClick={() => setCategory(category === c ? "" : c)}
+          >
+            <span>{marks[i]}</span>
+            <strong>{c}</strong>
+          </button>
+        ))}
+      </div>
+      <div className="shopping-section-title">
+        <div>
+          <h2>{category || "精选好物"}</h2>
+          <p>
+            {category ? "找到适合你的那一件" : "从视频里的心动，到生活里的陪伴"}
+          </p>
+        </div>
+        {category && <button onClick={() => setCategory("")}>查看全部</button>}
+      </div>
       <div className="commerce-tools">
         <label className="commerce-search">
           <Search size={18} />
           <input
             aria-label="搜索商品"
-            placeholder="搜索你喜欢的好物"
+            placeholder="搜索商品、心动好物…"
             maxLength={100}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {query && (
+            <button
+              className="icon-button"
+              aria-label="清空商品搜索"
+              onClick={() => setQuery("")}
+            >
+              <X size={15} />
+            </button>
+          )}
         </label>
         <select
           aria-label="商品排序"
@@ -234,17 +332,87 @@ export function Mall({ onNavigate }: CommerceProps) {
           onChange={(e) => setSort(e.target.value)}
         >
           <option value="latest">最新上架</option>
+          <option value="sales">销量优先</option>
           <option value="priceAsc">价格从低到高</option>
           <option value="priceDesc">价格从高到低</option>
         </select>
+        <label className="stock-filter">
+          <input
+            type="checkbox"
+            checked={stockOnly}
+            onChange={(e) => setStockOnly(e.target.checked)}
+          />
+          仅看有货
+        </label>
       </div>
+      <div className="mall-categories" aria-label="商品分类筛选">
+        <button
+          className={!category ? "selected" : ""}
+          onClick={() => setCategory("")}
+        >
+          全部好物
+        </button>
+        {productCategories.map((c) => (
+          <button
+            key={c}
+            className={category === c ? "selected" : ""}
+            onClick={() => setCategory(c)}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+      <ProductCatalog key={path} path={path} onNavigate={props.onNavigate} />
+      <p className="commerce-note mall-bottom-note">
+        演示商城 · 商品销量来自已完成的演示订单 · 模拟支付不实际扣款
+      </p>
+    </section>
+  );
+}
+function ProductCatalog({
+  path,
+  onNavigate,
+}: {
+  path: string;
+  onNavigate: (path: string) => void;
+}) {
+  const [page, setPage] = useState(0),
+    [retry, setRetry] = useState(0),
+    [items, setItems] = useState<Product[]>([]);
+  const { data, error, loading } = useRemote<Product[]>(
+    path + "&page=" + page + "&size=24",
+    retry,
+  );
+  useEffect(() => {
+    if (data)
+      setItems((old) =>
+        page === 0
+          ? data
+          : [...old, ...data.filter((p) => !old.some((o) => o.id === p.id))],
+      );
+  }, [data, page]);
+  return (
+    <>
       <LoadState
-        loading={loading}
+        loading={loading && page === 0}
         error={error}
         retry={() => setRetry((n) => n + 1)}
       />
-      {data && <ProductGrid products={data} onNavigate={onNavigate} />}
-    </section>
+      {(!loading || items.length > 0) && (
+        <ProductGrid products={items} onNavigate={onNavigate} />
+      )}
+      <div className="catalog-more">
+        {data?.length === 24 && (
+          <button
+            className="secondary"
+            disabled={loading}
+            onClick={() => setPage((n) => n + 1)}
+          >
+            {loading ? "加载中…" : "加载更多好物"}
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 export function Storefront({ id, ...props }: CommerceProps & { id: number }) {
@@ -313,14 +481,20 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
       {p && (
         <>
           <div className="product-detail">
-            <div className="detail-picture">
-              <ProductImage src={p.imageUrl} name={p.name} />
-            </div>
+            <ProductGallery product={p} />
             <div className="detail-copy">
               <span className="small-tag">店铺好物</span>
               <h1>{p.name}</h1>
               <p className="detail-price">¥ {money(p.price)}</p>
               <p>{p.description || "店主正在准备更多商品介绍。"}</p>
+              <p className="product-sales">
+                已售 {p.soldCount || 0} · {p.stock > 0 ? "现货" : "暂时售罄"}
+              </p>
+              <div className="product-facts">
+                <span>{p.category || "生活日用"}</span>
+                {p.specification && <span>{p.specification}</span>}
+                {p.origin && <span>产地·{p.origin}</span>}
+              </div>
               <p className="muted">可售库存 {p.stock} 件</p>
               <button
                 className="store-link"
@@ -333,6 +507,7 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
                 </span>
                 <ChevronRight size={18} />
               </button>
+              <ProductShopping product={p} props={props} />
               <button
                 className="primary purchase-button"
                 disabled={!p.stock}
@@ -342,6 +517,15 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
               >
                 {p.stock ? "立即购买" : "暂时售罄"}
               </button>
+              <div className="product-detail-copy">
+                <h3>商品详情</h3>
+                <p>
+                  {p.detailText ||
+                    p.description ||
+                    "店主正在准备更多商品介绍。"}
+                </p>
+                <p>发货地：{p.shippingFrom || "演示发货地"} · 物流：演示物流</p>
+              </div>
               <p className="commerce-note">
                 演示购买，无真实扣款。请使用虚拟收货信息体验。
               </p>
@@ -389,6 +573,7 @@ function Checkout({
           phone,
           address,
           requestKey: key,
+          expectedPrice: p.price,
         }),
       });
       props.toast("订单已创建，请在我的订单中确认模拟支付");
@@ -422,6 +607,14 @@ function Checkout({
       <p>{p.name}</p>
       <form className="commerce-form" onSubmit={submit}>
         <fieldset disabled={busy}>
+          <AddressPicker
+            onSelect={(a) => {
+              setRecipient(a.recipient);
+              setPhone(a.phone);
+              setAddress(a.region + " " + a.detail);
+              change();
+            }}
+          />
           <label>
             购买数量
             <input
@@ -464,6 +657,7 @@ function Checkout({
           <label>
             收货地址
             <textarea
+              aria-label="收货地址"
               required
               minLength={5}
               maxLength={300}
@@ -499,6 +693,7 @@ export function Orders({
   ...props
 }: CommerceProps & { seller?: boolean }) {
   const [retry, setRetry] = useState(0),
+    [detail, setDetail] = useState<string | null>(null),
     [filter, setFilter] = useState("ALL"),
     [busy, setBusy] = useState(""),
     [actionError, setActionError] = useState("");
@@ -602,7 +797,10 @@ export function Orders({
                 {states[o.status]}
               </span>
             </div>
-            <div className="order-product">
+            <button
+              className="order-product order-detail-trigger"
+              onClick={() => setDetail(o.orderNo)}
+            >
               <div className="order-image">
                 <ProductImage src={o.imageUrl} name={o.productName} />
               </div>
@@ -613,7 +811,7 @@ export function Orders({
                 </p>
                 <small>{o.orderNo}</small>
               </div>
-            </div>
+            </button>
             <details>
               <summary>收货信息与下单时间</summary>
               <p>
@@ -668,6 +866,13 @@ export function Orders({
           </article>
         ))}
       </div>
+      {detail && (
+        <OrderDetail
+          no={detail}
+          seller={seller}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </section>
   );
 }

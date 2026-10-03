@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { api, type DramaInput } from "./api";
 import { Modal } from "./Modal";
+import { productCategories } from "./Shopping";
 import {
   CommerceLogin,
   LoadState,
@@ -481,6 +482,21 @@ function ProductForm({
       price: p?.price || 1,
       stock: p?.stock || 0,
       version: p?.version,
+      details: {
+        category: p?.category || "生活日用",
+        material: p?.material || "",
+        specification: p?.specification || "",
+        origin: p?.origin || "",
+        shippingFrom: p?.shippingFrom || "",
+        detailText: p?.detailText || "",
+        images: (() => {
+          try {
+            return JSON.parse(p?.imagesJson || "[]") as string[];
+          } catch {
+            return [];
+          }
+        })(),
+      },
     }),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -492,7 +508,13 @@ function ProductForm({
     try {
       await api("/shop/products" + (p ? "/" + p.id : ""), {
         method: p ? "PATCH" : "POST",
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          details: {
+            ...form.details,
+            images: form.details.images.map((s) => s.trim()).filter(Boolean),
+          },
+        }),
       });
       onSaved();
     } catch (e) {
@@ -530,6 +552,22 @@ function ProductForm({
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
         </label>
+        <label>
+          商品分类
+          <select
+            value={form.details.category}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                details: { ...form.details, category: e.target.value },
+              })
+            }
+          >
+            {productCategories.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </label>
         <div className="commerce-field-row">
           <label>
             售价（元）
@@ -560,6 +598,92 @@ function ProductForm({
             />
           </label>
         </div>
+        <div className="commerce-field-row">
+          <label>
+            商品材质
+            <input
+              maxLength={100}
+              value={form.details.material}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  details: { ...form.details, material: e.target.value },
+                })
+              }
+            />
+          </label>
+          <label>
+            规格说明
+            <input
+              maxLength={100}
+              placeholder="如：350毫升 · 单只装"
+              value={form.details.specification}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  details: { ...form.details, specification: e.target.value },
+                })
+              }
+            />
+          </label>
+          <label>
+            产地
+            <input
+              maxLength={80}
+              value={form.details.origin}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  details: { ...form.details, origin: e.target.value },
+                })
+              }
+            />
+          </label>
+          <label>
+            发货地
+            <input
+              maxLength={80}
+              value={form.details.shippingFrom}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  details: { ...form.details, shippingFrom: e.target.value },
+                })
+              }
+            />
+          </label>
+        </div>
+        <label>
+          图文详情
+          <textarea
+            aria-label="图文详情"
+            maxLength={4000}
+            rows={5}
+            value={form.details.detailText}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                details: { ...form.details, detailText: e.target.value },
+              })
+            }
+          />
+        </label>
+        <label>
+          商品相册链接（每行一张，最多6张）
+          <textarea
+            aria-label="商品相册链接（每行一张，最多6张）"
+            value={form.details.images.join("\n")}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                details: {
+                  ...form.details,
+                  images: e.target.value.split("\n"),
+                },
+              })
+            }
+          />
+        </label>
       </fieldset>
       <p className="commerce-note">
         库存表示当前可售数量。待付款订单取消后，会自动返还对应数量。
