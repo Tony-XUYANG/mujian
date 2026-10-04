@@ -74,6 +74,10 @@ try {
   ).data;
   p3 = (await req("/shop/products", "POST", product("详版保留商品"), seller))
     .data;
+  const emptyReviews = await req("/mall/products/" + p1.id + "/reviews");
+  check("游客可读空评价且不伪造评分", emptyReviews.status === 200 && emptyReviews.data.reviewCount === 0 && Number(emptyReviews.data.averageRating) === 0);
+  check("不存在商品返回中文404", (await req("/mall/products/9223372036854775807/reviews")).status === 404);
+  check("游客不可读待评价订单", (await req("/me/products/" + p1.id + "/reviewable-orders")).status === 401);
   check(
     "商品详情参数与相册持久化",
     p1.category === "生活日用" &&
@@ -322,6 +326,14 @@ try {
     "下单记录真实时间线",
     initial.events.length === 1 && initial.events[0].status === "PENDING",
   );
+  const pendingReview = await req(
+    "/me/products/" + order.productId + "/reviews",
+    "POST",
+    { rating: 5, content: "还未收货不能提前评价", orderNo: order.orderNo },
+    buyer,
+  );
+  check("未完成订单不能评价", pendingReview.status === 409);
+  check("未收货的中文提示", pendingReview.data.message === "确认收货后才能评价商品");
   await req(
     "/me/orders/" + order.orderNo + "/demo-pay",
     "POST",
@@ -360,6 +372,76 @@ try {
     (await req("/mall/products/" + order.productId)).data.soldCount ===
       order.quantity,
   );
+  const reviewable = await req(
+    "/me/products/" + order.productId + "/reviewable-orders",
+    "GET",
+    undefined,
+    buyer,
+  );
+  check(
+    "完成订单进入可评价列表",
+    reviewable.status === 200 && reviewable.data.some((o) => o.orderNo === order.orderNo),
+  );
+  const reviewInput = { rating: 5, content: "  商品很喜欢，符合介绍。  ", orderNo: order.orderNo };
+  const reviewPath = "/me/products/" + order.productId + "/reviews";
+  check("游客不可发布评价", (await req(reviewPath, "POST", reviewInput)).status === 401);
+  check("不能评价他人订单", (await req(reviewPath, "POST", reviewInput, other)).status === 404);
+  check("待评价订单按账号隔离", (await req("/me/products/" + order.productId + "/reviewable-orders", "GET", undefined, other)).data.length === 0);
+  check("订单不能冒用为其他商品评价", (await req("/me/products/" + p3.id + "/reviews", "POST", reviewInput, buyer)).status === 404);
+  for (const invalid of [{ rating: 0 }, { rating: 6 }, { content: "   " }, { content: "字".repeat(501) }]) {
+    const rejected = await req(reviewPath, "POST", { ...reviewInput, ...invalid }, buyer);
+    check("非法评价返回中文校验错误：" + Object.keys(invalid)[0] + (invalid.rating ?? (invalid.content.length)), rejected.status === 400 && /[\u4e00-\u9fff]/.test(rejected.data.message));
+  }
+  const review = await req(
+    "/me/products/" + order.productId + "/reviews",
+    "POST",
+    reviewInput,
+    buyer,
+  );
+  check(
+    "完成订单可以发布评价",
+    review.status === 201 && review.data.rating === 5 && review.data.content === "商品很喜欢，符合介绍。",
+  );
+  const reviewSummary = await req(
+    "/mall/products/" + order.productId + "/reviews",
+  );
+  check(
+    "商品详情返回评价摘要",
+    reviewSummary.status === 200 &&
+      reviewSummary.data.reviewCount === 1 &&
+      reviewSummary.data.items[0].id === review.data.id && Number(reviewSummary.data.averageRating) === 5,
+  );
+  check("公开评价不泄露订单和买家ID", reviewSummary.data.items.every((r) => !('orderNo' in r) && !('buyerId' in r) && !('buyer_id' in r)));
+  check("评价后移出待评价列表", (await req("/me/products/" + order.productId + "/reviewable-orders", "GET", undefined, buyer)).data.length === 0);
+  check("订单已评价状态同步", Boolean((await req("/me/orders/" + order.orderNo, "GET", undefined, buyer)).data.reviewed));
+  check(
+    "同一订单不能重复评价",
+    (
+      await req(
+        "/me/products/" + order.productId + "/reviews",
+        "POST",
+        { rating: 4, content: "重复评价", orderNo: order.orderNo },
+        buyer,
+      )
+    ).status === 409,
+  );
+  const secondPurchase = (await req("/products/" + order.productId + "/buy", "POST", {
+    quantity: 1, recipient: "虚拟买家", phone: "13800000000", address: "虚拟街道100号",
+    requestKey: randomUUID(), expectedPrice: 29.9,
+  }, buyer)).data;
+  pending.add(secondPurchase.orderNo);
+  await req("/me/orders/" + secondPurchase.orderNo + "/demo-pay", "POST", undefined, buyer);
+  await req("/shop/orders/" + secondPurchase.orderNo + "/ship", "POST", undefined, seller);
+  await req("/me/orders/" + secondPurchase.orderNo + "/complete", "POST", undefined, buyer);
+  pending.delete(secondPurchase.orderNo);
+  await req("/shop/products/" + order.productId + "/status", "PUT", { onSale: false }, seller);
+  const concurrentReviews = await Promise.all(Array.from({ length: 5 }, () => req(reviewPath, "POST", {
+    rating: 1, content: "再次购买后的不同体验", orderNo: secondPurchase.orderNo,
+  }, buyer)));
+  check("下架商品的已完成订单仍可评价且并发只成功一次", concurrentReviews.filter((r) => r.status === 201).length === 1 && concurrentReviews.filter((r) => r.status === 409).length === 4);
+  const aggregated = (await req("/mall/products/" + order.productId + "/reviews")).data;
+  check("复购评价独立计算真实平均分", aggregated.reviewCount === 2 && Number(aggregated.averageRating) === 3 && aggregated.items[0].content === "再次购买后的不同体验");
+  await req("/shop/products/" + order.productId + "/status", "PUT", { onSale: true }, seller);
   await req(
     "/shop/products/" + p3.id + "/status",
     "PUT",

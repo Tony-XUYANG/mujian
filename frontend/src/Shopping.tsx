@@ -8,6 +8,7 @@ import {
   Minus,
   Plus,
   ShoppingCart,
+  Star,
   Store,
   Trash2,
   X,
@@ -883,6 +884,184 @@ export function ProductShopping({
         <ChevronRight size={20} />
       </button>
     </div>
+  );
+}
+
+type ProductReview = {
+  id: number;
+  productId: number;
+  rating: number;
+  content: string;
+  createTime: string;
+  nickname: string;
+  avatar: string;
+};
+type ProductReviewSummary = {
+  items: ProductReview[];
+  reviewCount: number;
+  averageRating: number;
+};
+type ReviewableOrder = {
+  orderNo: string;
+  quantity: number;
+  createTime: string;
+};
+
+export function ProductReviews({
+  productId,
+  props,
+  initialOrderNo = "",
+  onPublished,
+}: {
+  productId: number;
+  props: CommerceProps;
+  initialOrderNo?: string;
+  onPublished?: () => void;
+}) {
+  const [refresh, setRefresh] = useState(0);
+  const [rating, setRating] = useState(0);
+  const [content, setContent] = useState("");
+  const [orderNo, setOrderNo] = useState(initialOrderNo);
+  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const { data, error, loading } = useRemote<ProductReviewSummary>(
+    "/mall/products/" + productId + "/reviews",
+    refresh,
+  );
+  const { data: reviewable, error: eligibilityError, loading: eligibilityLoading } = useRemote<ReviewableOrder[]>(
+    props.user ? "/me/products/" + productId + "/reviewable-orders" : null,
+    refresh,
+  );
+  useEffect(() => {
+    if (reviewable && !reviewable.some((o) => o.orderNo === orderNo))
+      setOrderNo(reviewable[0]?.orderNo || "");
+  }, [reviewable, orderNo]);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!props.user) {
+      props.onLogin();
+      return;
+    }
+    if (busy || !orderNo || !rating || !content.trim()) return;
+    setBusy(true);
+    setSubmitError("");
+    try {
+      await api("/me/products/" + productId + "/reviews", {
+        method: "POST",
+        body: JSON.stringify({ rating, content: content.trim(), orderNo }),
+      });
+      setContent("");
+      setRating(0);
+      setRefresh((n) => n + 1);
+      props.toast("评价已发布，感谢你的真实反馈");
+      onPublished?.();
+    } catch (e) {
+      setSubmitError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="product-reviews" aria-labelledby="product-reviews-title">
+      <div className="product-reviews-heading">
+        <div>
+          <h2 id="product-reviews-title">商品评价</h2>
+          <p>购买过的用户，分享真实使用感受</p>
+        </div>
+        <div className="review-score" aria-label={data?.reviewCount ? data.averageRating + "分" : "暂无评分"}>
+          <strong>{data?.reviewCount ? Number(data.averageRating).toFixed(1) : "—"}</strong>
+          <span>
+            <Star size={14} fill="currentColor" />
+            {data ? data.reviewCount + " 条评价" : error ? "评分暂不可用" : "评分加载中"}
+          </span>
+        </div>
+      </div>
+      <LoadState loading={loading} error={error} retry={() => setRefresh((n) => n + 1)} />
+      {props.user && <LoadState loading={eligibilityLoading} error={eligibilityError} retry={() => setRefresh((n) => n + 1)} />}
+      {props.user && reviewable?.length ? (
+        <form className="review-editor" onSubmit={submit} noValidate>
+          <fieldset disabled={busy}>
+          <div className="review-editor-title">
+            <strong>写下你的评价</strong>
+            <span>确认收货后可评价，每笔订单限评一次</span>
+          </div>
+          <div className="review-rating">
+            <span>满意度</span>
+            <div role="radiogroup" aria-label="选择评分">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <label
+                  key={value}
+                  className={value <= rating ? "selected" : ""}
+                >
+                  <input type="radio" name="product-rating" value={value} checked={rating === value} aria-label={value + "星"} onChange={() => setRating(value)} />
+                  <Star size={22} fill="currentColor" aria-hidden="true" />
+                </label>
+              ))}
+            </div>
+            <b>{rating ? rating + " 星" : "请选择"}</b>
+          </div>
+          {reviewable.length > 1 && (
+            <label className="review-order-picker">
+              评价订单
+              <select aria-label="评价订单" value={orderNo} onChange={(e) => setOrderNo(e.target.value)}>
+                {reviewable.map((order) => (
+                  <option value={order.orderNo} key={order.orderNo}>
+                    {new Date(order.createTime).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })} · {order.quantity}件 · 尾号{order.orderNo.slice(-4)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <textarea
+            aria-label="评价内容"
+            value={content}
+            maxLength={500}
+            required
+            placeholder="说说你的真实体验，帮助其他人做决定…"
+            onChange={(e) => setContent(e.target.value)}
+          />
+          <div className="review-editor-actions">
+            <span>{content.length}/500</span>
+            <button className="primary" disabled={busy || !rating || !content.trim() || !orderNo}>
+              {busy ? "发布中…" : "发布评价"}
+            </button>
+          </div>
+          </fieldset>
+          {submitError && <p className="form-error" role="alert">{submitError}</p>}
+        </form>
+      ) : props.user ? (
+        !eligibilityLoading && !eligibilityError && <p className="review-empty">暂无待评价订单。确认收货后可评价，已评价的订单无需重复提交。</p>
+      ) : (
+        <button className="review-login" onClick={props.onLogin}>
+          登录后评价，分享你的使用感受
+          <ChevronRight size={16} />
+        </button>
+      )}
+      {data?.items.length ? (
+        <div className="review-list">
+          {data.items.map((review) => (
+            <article className="review-item" key={review.id}>
+              <div className="review-avatar">
+                {review.avatar ? <img src={review.avatar} alt="" /> : (review.nickname || "幕间用户").slice(0, 1)}
+              </div>
+              <div className="review-item-main">
+                <div className="review-item-head">
+                  <strong>{review.nickname || "幕间用户"}</strong>
+                  <span>{new Date(review.createTime).toLocaleDateString("zh-CN")}</span>
+                </div>
+                <div className="review-stars" aria-label={review.rating + "星"}>
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <Star key={value} size={13} fill={value <= review.rating ? "currentColor" : "none"} />
+                  ))}
+                </div>
+                <p>{review.content}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : data && <p className="review-empty">还没有评价，成为第一个分享体验的人吧。</p>}
+      {data && data.reviewCount > data.items.length && <p className="review-empty">当前展示最近 {data.items.length} 条评价，评分统计全部可见评价。</p>}
+    </section>
   );
 }
 export function ProductFavorites(props: CommerceProps) {

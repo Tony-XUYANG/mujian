@@ -342,3 +342,21 @@ CREATE TABLE IF NOT EXISTS shop_order_event (
   FOREIGN KEY (order_no) REFERENCES shop_order(order_no) ON DELETE CASCADE,
   INDEX idx_order_event (order_no,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS product_review (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id BIGINT NOT NULL,
+  buyer_id BIGINT NOT NULL,
+  order_no VARCHAR(32) NOT NULL,
+  rating TINYINT NOT NULL,
+  content VARCHAR(500) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'VISIBLE',
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uk_product_review_order UNIQUE (order_no,product_id),
+  CONSTRAINT fk_review_product FOREIGN KEY (product_id) REFERENCES shop_product(id) ON DELETE CASCADE,
+  CONSTRAINT fk_review_buyer FOREIGN KEY (buyer_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  CONSTRAINT fk_review_order FOREIGN KEY (order_no) REFERENCES shop_order(order_no) ON DELETE CASCADE,
+  CONSTRAINT ck_review_rating CHECK (rating BETWEEN 1 AND 5),
+  CONSTRAINT ck_review_status CHECK (status IN ('VISIBLE','HIDDEN')),
+  INDEX idx_review_product (product_id,status,create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

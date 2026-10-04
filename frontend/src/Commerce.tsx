@@ -19,6 +19,7 @@ import {
   OrderDetail,
   AddressPicker,
   ProductGallery,
+  ProductReviews,
 } from "./Shopping";
 
 export type Product = {
@@ -48,6 +49,7 @@ export type Shop = {
   description: string | null;
 };
 export type Order = {
+  reviewed: boolean | number;
   orderNo: string;
   productId: number;
   productName: string;
@@ -531,6 +533,7 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
               </p>
             </div>
           </div>
+          <ProductReviews productId={p.id} props={props} />
           {checkout && props.user && (
             <Checkout
               product={p}
@@ -694,6 +697,7 @@ export function Orders({
 }: CommerceProps & { seller?: boolean }) {
   const [retry, setRetry] = useState(0),
     [detail, setDetail] = useState<string | null>(null),
+    [reviewOrder, setReviewOrder] = useState<Order | null>(null),
     [filter, setFilter] = useState("ALL"),
     [busy, setBusy] = useState(""),
     [actionError, setActionError] = useState("");
@@ -861,6 +865,14 @@ export function Orders({
                     确认收货
                   </button>
                 )}
+                {!seller && o.status === "COMPLETED" && (
+                  <button
+                    className="secondary"
+                    onClick={() => setReviewOrder(o)}
+                  >
+                    {o.reviewed ? "查看评价" : "评价商品"}
+                  </button>
+                )}
               </div>
             </div>
           </article>
@@ -872,6 +884,21 @@ export function Orders({
           seller={seller}
           onClose={() => setDetail(null)}
         />
+      )}
+      {reviewOrder && (
+        <Modal label="商品评价" className="commerce-modal" onClose={() => setReviewOrder(null)}>
+          <div className="commerce-modal-heading">
+            <h2>{reviewOrder.productName}</h2>
+            <button className="icon-button" aria-label="关闭商品评价" onClick={() => setReviewOrder(null)}><X /></button>
+          </div>
+          <ProductReviews
+            key={reviewOrder.orderNo}
+            productId={reviewOrder.productId}
+            initialOrderNo={reviewOrder.orderNo}
+            onPublished={() => setRetry((n) => n + 1)}
+            props={props}
+          />
+        </Modal>
       )}
     </section>
   );

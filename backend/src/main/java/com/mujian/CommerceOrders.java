@@ -15,7 +15,8 @@ public class CommerceOrders {
         SELECT o.order_no AS orderNo,o.product_id AS productId,o.quantity,o.unit_price AS unitPrice,
           o.total_amount AS totalAmount,o.status,o.create_time AS createTime,o.expires_at AS expiresAt,
           o.product_name AS productName,o.image_url AS imageUrl,o.recipient,o.phone,o.address,
-          s.id AS shopId,s.name AS shopName
+          s.id AS shopId,s.name AS shopName,
+          EXISTS(SELECT 1 FROM product_review r WHERE r.order_no=o.order_no AND r.product_id=o.product_id) AS reviewed
         FROM shop_order o JOIN shop s ON s.id=o.shop_id
         """;
     public CommerceOrders(JdbcTemplate db) { this.db=db; }
