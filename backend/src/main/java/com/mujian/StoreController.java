@@ -21,6 +21,7 @@ public class StoreController {
     private final JdbcTemplate db;
     private final DramaRepository dramas;
     private final ProductDetails details;
+    private final ProductVariants variants;
     static final String PRODUCT = """
         SELECT p.id,p.name,p.image_url AS imageUrl,p.description,p.price,p.stock,p.status,p.version,
           s.id AS shopId,s.name AS shopName,s.logo_url AS shopLogoUrl,
@@ -28,12 +29,13 @@ public class StoreController {
           COALESCE(pd.specification,'') AS specification,COALESCE(pd.origin,'') AS origin,
           COALESCE(pd.shipping_from,'') AS shippingFrom,COALESCE(pd.detail_text,'') AS detailText,
           COALESCE(CAST(pd.image_urls AS CHAR),'[]') AS imagesJson,
-          (SELECT COALESCE(SUM(o.quantity),0) FROM shop_order o WHERE o.product_id=p.id AND o.status='COMPLETED') AS soldCount
+          (SELECT COALESCE(SUM(o.quantity),0) FROM shop_order o WHERE o.product_id=p.id AND o.status='COMPLETED') AS soldCount,
+          EXISTS(SELECT 1 FROM product_variant pv WHERE pv.product_id=p.id) AS hasVariants
         FROM shop_product p JOIN shop s ON s.id=p.shop_id
         LEFT JOIN shop_product_detail pd ON pd.product_id=p.id
         """;
     private static final String SHOP = "SELECT id,name,logo_url AS logoUrl,description,status FROM shop ";
-    public StoreController(JdbcTemplate db, DramaRepository dramas,ProductDetails details) { this.db=db; this.dramas=dramas; this.details=details; }
+    public StoreController(JdbcTemplate db, DramaRepository dramas,ProductDetails details,ProductVariants variants) { this.db=db; this.dramas=dramas; this.details=details; this.variants=variants; }
 
     public record ShopInput(
         @NotBlank(message="请输入店铺名称") @Size(max=80,message="店铺名称最多80字") String name,
@@ -115,6 +117,9 @@ public class StoreController {
     public Map<String,Object> updateProduct(@PathVariable long id,@Valid @RequestBody ProductInput in,@AuthenticationPrincipal Jwt jwt) {
         long shopId=ownerShopId(jwt);optionalUrl(in.imageUrl());requireProduct(id,shopId);
         if(in.version()==null)throw bad("请刷新商品资料后再编辑");
+        var locked=db.queryForMap("SELECT * FROM shop_product WHERE id=? FOR UPDATE",id);
+        if(!variants.list(id,true).isEmpty() && (in.stock()!=number(locked,"stock") || in.price().compareTo((BigDecimal)locked.get("price"))!=0))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"多规格商品请在规格库存中修改价格和库存");
         if(db.update("UPDATE shop_product SET name=?,image_url=?,description=?,price=?,stock=?,version=version+1 WHERE id=? AND shop_id=? AND version=?",in.name().trim(),clean(in.imageUrl()),clean(in.description()),in.price(),in.stock(),id,shopId,in.version())==0)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"商品或库存已变化，请关闭表单并刷新后重试");
         details.save(id,in.details());
@@ -189,7 +194,8 @@ public class StoreController {
     }
     private Map<String,Object> productRow(long id,boolean all) {
         var rows=db.queryForList(PRODUCT+" WHERE p.id=? AND (? OR (p.status='ON_SALE' AND s.status='ACTIVE'))",id,all);
-        if(rows.isEmpty())throw missing("商品不存在或已下架");return rows.getFirst();
+        if(rows.isEmpty())throw missing("商品不存在或已下架");
+        var row=rows.getFirst(); row.put("variants",variants.list(id,false)); return row;
     }
     private long insert(String sql,Object... args) {
         var key=new GeneratedKeyHolder();db.update(c->{var ps=c.prepareStatement(sql,Statement.RETURN_GENERATED_KEYS);for(int i=0;i<args.length;i++)ps.setObject(i+1,args[i]);return ps;},key);

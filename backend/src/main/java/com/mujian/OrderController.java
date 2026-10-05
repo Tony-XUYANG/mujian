@@ -21,7 +21,8 @@ public class OrderController {
         @NotBlank(message="请输入联系电话") @Pattern(regexp="[0-9+ ()-]{6,24}",message="请输入有效的联系电话") String phone,
         @NotBlank(message="请输入收货地址") @Size(min=5,max=300,message="收货地址需为5至300字") String address,
         @NotBlank(message="缺少订单请求标识，请重新打开结算页") @Pattern(regexp="[A-Za-z0-9_-]{16,64}",message="订单请求标识不正确") String requestKey,
-        @DecimalMin(value="0.01",message="价格不正确") @Digits(integer=8,fraction=2,message="价格最多两位小数") BigDecimal expectedPrice) {}
+        @DecimalMin(value="0.01",message="价格不正确") @Digits(integer=8,fraction=2,message="价格最多两位小数") BigDecimal expectedPrice,
+        @Positive(message="规格编号不正确") Long skuId) {}
     @PostMapping("/products/{id}/buy") @ResponseStatus(HttpStatus.CREATED)
     public Map<String,Object> buy(@PathVariable long id,@Valid @RequestBody BuyInput in,@AuthenticationPrincipal Jwt jwt) { return orders.create(DramaController.userId(jwt),id,in); }
     @GetMapping("/me/orders")

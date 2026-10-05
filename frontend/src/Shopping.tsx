@@ -50,6 +50,8 @@ export type CartItem = Product & {
   quantity: number;
   available: boolean | number;
 };
+const cartKey = (p: CartItem) => p.id + ":" + (p.skuId || "default");
+const cartLabel = (p: CartItem) => p.name + (p.variantName ? " · " + p.variantName : "");
 export const shoppingChanged = () =>
   window.dispatchEvent(new Event("shopping-changed"));
 
@@ -453,7 +455,7 @@ export function AddressPicker({
 }
 export function Cart(props: CommerceProps) {
   const [refresh, setRefresh] = useState(0),
-    [selection, setSelection] = useState<number[] | null>(null),
+    [selection, setSelection] = useState<string[] | null>(null),
     [busy, setBusy] = useState(false),
     [actionError, setActionError] = useState(""),
     [checkout, setCheckout] = useState(false);
@@ -465,7 +467,7 @@ export function Cart(props: CommerceProps) {
     (p) => p.available && p.stock >= p.quantity,
   );
   const chosen = eligible.filter((p) =>
-    (selection || eligible.map((v) => v.id)).includes(p.id),
+    (selection || eligible.map(cartKey)).includes(cartKey(p)),
   );
   const total =
     chosen.reduce((sum, p) => sum + Math.round(p.price * 100) * p.quantity, 0) /
@@ -475,9 +477,9 @@ export function Cart(props: CommerceProps) {
     setBusy(true);
     setActionError("");
     try {
-      await api("/me/cart/" + p.id, {
+      await api("/me/cart/" + p.id + (quantity === undefined && p.skuId ? "?skuId=" + p.skuId : ""), {
         method: quantity === undefined ? "DELETE" : "PUT",
-        body: quantity === undefined ? undefined : JSON.stringify({ quantity }),
+        body: quantity === undefined ? undefined : JSON.stringify({ quantity, skuId: p.skuId }),
       });
       setRefresh((n) => n + 1);
       shoppingChanged();
@@ -487,8 +489,8 @@ export function Cart(props: CommerceProps) {
       setBusy(false);
     }
   }
-  function toggle(id: number) {
-    const ids = selection || eligible.map((p) => p.id);
+  function toggle(id: string) {
+    const ids = selection || eligible.map(cartKey);
     setSelection(ids.includes(id) ? ids.filter((v) => v !== id) : [...ids, id]);
   }
   if (!props.user) return <CommerceLogin onLogin={props.onLogin} />;
@@ -557,14 +559,14 @@ export function Cart(props: CommerceProps) {
                     className={
                       "cart-line" + (!valid ? " cart-unavailable" : "")
                     }
-                    key={p.id}
+                    key={cartKey(p)}
                   >
                     <input
                       type="checkbox"
-                      aria-label={"选择" + p.name}
+                      aria-label={"选择" + cartLabel(p)}
                       disabled={!valid || busy}
-                      checked={chosen.some((v) => v.id === p.id)}
-                      onChange={() => toggle(p.id)}
+                      checked={chosen.some((v) => cartKey(v) === cartKey(p))}
+                      onChange={() => toggle(cartKey(p))}
                     />
                     <button
                       className="cart-image"
@@ -580,7 +582,7 @@ export function Cart(props: CommerceProps) {
                         {p.name}
                       </button>
                       <small>
-                        {p.specification || "默认款"} ·{" "}
+                        {p.variantName || p.specification || "默认款"} ·{" "}
                         {p.category || "生活日用"}
                       </small>
                       <p className="price">¥ {money(p.price)}</p>
@@ -588,13 +590,13 @@ export function Cart(props: CommerceProps) {
                         <p className="form-error">
                           {p.available
                             ? "库存不足，剩余" + p.stock + "件"
-                            : "商品已下架或店铺已关闭"}
+                            : p.hasVariants && !p.skuId ? "商品已启用多规格，请进入商品页重新选择" : "商品或规格已停售，或店铺已关闭"}
                         </p>
                       )}
                       <div className="cart-line-actions">
                         <div className="quantity-stepper">
                           <button
-                            aria-label={"减少" + p.name}
+                            aria-label={"减少" + cartLabel(p)}
                             title={p.stock > 0 && p.quantity > p.stock ? "调整到剩余库存数量" : "减少一件"}
                             disabled={busy || !p.available || p.quantity <= 1 || p.stock < 1}
                             onClick={() => mutate(p, Math.min(p.quantity - 1, p.stock))}
@@ -603,7 +605,7 @@ export function Cart(props: CommerceProps) {
                           </button>
                           <span>{p.quantity}</span>
                           <button
-                            aria-label={"增加" + p.name}
+                            aria-label={"增加" + cartLabel(p)}
                             disabled={
                               busy ||
                               !p.available ||
@@ -616,7 +618,7 @@ export function Cart(props: CommerceProps) {
                         </div>
                         <button
                           className="icon-button"
-                          aria-label={"移除" + p.name}
+                          aria-label={"移除" + cartLabel(p)}
                           disabled={busy}
                           onClick={() => mutate(p)}
                         >
@@ -641,7 +643,7 @@ export function Cart(props: CommerceProps) {
                 setSelection(
                   chosen.length === eligible.length
                     ? []
-                    : eligible.map((p) => p.id),
+                    : eligible.map(cartKey),
                 )
               }
             />
@@ -708,6 +710,7 @@ function CartCheckout({
           addressId: address.id,
           items: items.map((p) => ({
             productId: p.id,
+            skuId: p.skuId,
             quantity: p.quantity,
             expectedPrice: p.price,
           })),
@@ -760,11 +763,12 @@ function CartCheckout({
           )}
           <div className="checkout-lines">
             {items.map((p) => (
-              <article key={p.id}>
+              <article key={cartKey(p)}>
                 <ProductImage src={p.imageUrl} name={p.name} />
                 <div>
                   <small>{p.shopName}</small>
                   <strong>{p.name}</strong>
+                  {p.variantName && <small>{p.variantName}</small>}
                   <span>
                     ¥ {money(p.price)} × {p.quantity}
                   </span>
@@ -788,7 +792,7 @@ function CartCheckout({
           </p>
         </div>
         <p className="commerce-note">
-          当前按商品拆成 {items.length}{" "}
+          当前按商品及规格拆成 {items.length}{" "}
           笔独立订单，分别模拟付款、发货与收货。15分钟未付款自动取消。
         </p>
         {error && (
@@ -840,7 +844,7 @@ export function ProductShopping({
       if (kind === "cart") {
         await api("/me/cart/" + product.id, {
           method: "POST",
-          body: JSON.stringify({ quantity: 1 }),
+          body: JSON.stringify({ quantity: 1, skuId: product.skuId }),
         });
         shoppingChanged();
         props.toast("已加入购物车");
@@ -870,7 +874,7 @@ export function ProductShopping({
       </button>
       <button
         className="secondary add-to-cart"
-        disabled={busy || !product.stock}
+        disabled={busy || !product.stock || Boolean(product.hasVariants && !product.skuId)}
         onClick={() => act("cart")}
       >
         <ShoppingCart size={18} />
@@ -1184,6 +1188,7 @@ export function OrderDetail({
               <div>
                 <small>{o.shopName}</small>
                 <strong>{o.productName}</strong>
+                {o.variantName && <small className="selected-variant">{o.variantName}</small>}
                 <span>
                   ¥ {money(o.unitPrice)} × {o.quantity}
                 </span>

@@ -11,15 +11,17 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class CommerceOrders {
     private final JdbcTemplate db;
+    private final ProductVariants variants;
     static final String SELECT = """
         SELECT o.order_no AS orderNo,o.product_id AS productId,o.quantity,o.unit_price AS unitPrice,
           o.total_amount AS totalAmount,o.status,o.create_time AS createTime,o.expires_at AS expiresAt,
           o.product_name AS productName,o.image_url AS imageUrl,o.recipient,o.phone,o.address,
-          s.id AS shopId,s.name AS shopName,
+          s.id AS shopId,s.name AS shopName,ov.variant_id AS skuId,ov.variant_name AS variantName,
           EXISTS(SELECT 1 FROM product_review r WHERE r.order_no=o.order_no AND r.product_id=o.product_id) AS reviewed
         FROM shop_order o JOIN shop s ON s.id=o.shop_id
+        LEFT JOIN order_variant ov ON ov.order_no=o.order_no
         """;
-    public CommerceOrders(JdbcTemplate db) { this.db=db; }
+    public CommerceOrders(JdbcTemplate db,ProductVariants variants) { this.db=db; this.variants=variants; }
 
     @Transactional
     public Map<String,Object> create(long buyer,long productId,OrderController.BuyInput in) {
@@ -28,7 +30,10 @@ public class CommerceOrders {
         var prior=db.queryForList("SELECT * FROM shop_order WHERE buyer_id=? AND request_key=?",buyer,in.requestKey());
         if(!prior.isEmpty()) {
             var old=prior.getFirst();
+            var oldVariants=db.queryForList("SELECT variant_id FROM order_variant WHERE order_no=?",Long.class,old.get("order_no"));
+            Long oldSku=oldVariants.isEmpty()?null:oldVariants.getFirst();
             if(number(old,"product_id")!=productId || number(old,"quantity")!=in.quantity()
+                || !Objects.equals(oldSku,in.skuId())
                 || !in.recipient().trim().equals(old.get("recipient")) || !in.phone().trim().equals(old.get("phone")) || !in.address().trim().equals(old.get("address")))
                 throw conflict("这次提交与原订单不同，请重新打开结算页");
             return row((String)old.get("order_no"));
@@ -38,17 +43,20 @@ public class CommerceOrders {
         var p=products.getFirst();
         String shopStatus=db.queryForObject("SELECT status FROM shop WHERE id=?",String.class,p.get("shop_id"));
         if(!"ON_SALE".equals(p.get("status"))||!"ACTIVE".equals(shopStatus))throw conflict("商品已下架或店铺已关闭");
-        if(number(p,"stock")<in.quantity())throw conflict("库存不足，请减少购买数量");
-        BigDecimal unit=(BigDecimal)p.get("price");
+        var choice=variants.choose(p,in.skuId());
+        if(choice.stock()<in.quantity())throw conflict("库存不足，请减少购买数量");
+        BigDecimal unit=choice.price();
+        if(choice.skuId()!=null && in.expectedPrice()==null)throw conflict("请重新确认规格价格");
         if(in.expectedPrice()!=null&&unit.compareTo(in.expectedPrice())!=0)throw conflict("商品价格已变化，请刷新商品页后重新确认");
         String no="MJ"+UUID.randomUUID().toString().replace("-","").substring(0,26).toUpperCase(Locale.ROOT);
-        db.update("UPDATE shop_product SET stock=stock-?,version=version+1 WHERE id=?",in.quantity(),productId);
+        variants.changeStock(productId,choice.skuId(),-in.quantity());
         db.update("""
             INSERT INTO shop_order(order_no,buyer_id,shop_id,product_id,quantity,unit_price,total_amount,
               request_key,product_name,image_url,recipient,phone,address,expires_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 15 MINUTE))
             """,no,buyer,p.get("shop_id"),productId,in.quantity(),unit,unit.multiply(BigDecimal.valueOf(in.quantity())),
             in.requestKey(),p.get("name"),p.get("image_url"),in.recipient().trim(),in.phone().trim(),in.address().trim());
+        if(choice.skuId()!=null)db.update("INSERT INTO order_variant(order_no,variant_id,variant_name) VALUES (?,?,?)",no,choice.skuId(),choice.name());
         event(no,"PENDING","订单已提交，保留库存15分钟");
         return row(no);
     }
@@ -96,7 +104,9 @@ public class CommerceOrders {
     }
     private void cancel(Map<String,Object> o,String reason) {
         db.update("UPDATE shop_order SET status='CANCELLED' WHERE id=?",o.get("id"));
-        db.update("UPDATE shop_product SET stock=stock+?,version=version+1 WHERE id=?",o.get("quantity"),o.get("product_id"));
+        db.queryForObject("SELECT id FROM shop_product WHERE id=? FOR UPDATE",Long.class,o.get("product_id"));
+        var selected=db.queryForList("SELECT variant_id FROM order_variant WHERE order_no=?",Long.class,o.get("order_no"));
+        variants.changeStock(number(o,"product_id"),selected.isEmpty()?null:selected.getFirst(),(int)number(o,"quantity"));
         event((String)o.get("order_no"),"CANCELLED",reason);
     }
     private void event(String no,String status,String message){db.update("INSERT INTO shop_order_event(order_no,status,description) VALUES (?,?,?)",no,status,message);}

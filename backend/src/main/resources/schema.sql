@@ -360,3 +360,35 @@ CREATE TABLE IF NOT EXISTS product_review (
   CONSTRAINT ck_review_status CHECK (status IN ('VISIBLE','HIDDEN')),
   INDEX idx_review_product (product_id,status,create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Optional variants preserve all legacy product/cart/order records.
+CREATE TABLE IF NOT EXISTS product_variant (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id BIGINT NOT NULL,
+  name VARCHAR(80) NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  stock INT NOT NULL,
+  on_sale BOOLEAN NOT NULL DEFAULT TRUE,
+  FOREIGN KEY (product_id) REFERENCES shop_product(id) ON DELETE CASCADE,
+  CHECK (price > 0 AND stock >= 0),
+  INDEX idx_variant_product (product_id,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS variant_cart (
+  user_id BIGINT NOT NULL,
+  variant_id BIGINT NOT NULL,
+  quantity INT NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id,variant_id),
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE,
+  FOREIGN KEY (variant_id) REFERENCES product_variant(id) ON DELETE CASCADE,
+  CHECK (quantity BETWEEN 1 AND 99)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS order_variant (
+  order_no VARCHAR(32) PRIMARY KEY,
+  variant_id BIGINT NOT NULL,
+  variant_name VARCHAR(80) NOT NULL,
+  FOREIGN KEY (order_no) REFERENCES shop_order(order_no) ON DELETE CASCADE,
+  FOREIGN KEY (variant_id) REFERENCES product_variant(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

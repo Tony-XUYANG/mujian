@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { api, type User } from "./api";
 import { Modal } from "./Modal";
+import { VariantSelector, type Variant } from "./Variants";
 import {
   ProductShopping,
   ShoppingEntry,
@@ -23,6 +24,10 @@ import {
 } from "./Shopping";
 
 export type Product = {
+  hasVariants?: boolean | number;
+  variants?: Variant[];
+  skuId?: number;
+  variantName?: string;
   id: number;
   name: string;
   imageUrl: string | null;
@@ -49,6 +54,8 @@ export type Shop = {
   description: string | null;
 };
 export type Order = {
+  skuId?: number;
+  variantName?: string;
   reviewed: boolean | number;
   orderNo: string;
   productId: number;
@@ -185,7 +192,7 @@ export function ProductGrid({
               {p.category || "生活日用"} · 已售 {p.soldCount || 0}
             </p>
             <div>
-              <strong className="price">¥ {money(p.price)}</strong>
+              <strong className="price">¥ {money(p.price)}{Boolean(p.hasVariants) && " 起"}</strong>
               <span>
                 查看商品 <ChevronRight size={13} />
               </span>
@@ -460,12 +467,16 @@ export function Storefront({ id, ...props }: CommerceProps & { id: number }) {
 }
 export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
   const [retry, setRetry] = useState(0),
+    [skuId, setSkuId] = useState<number | null>(null),
     [checkout, setCheckout] = useState(false);
   const {
     data: p,
     error,
     loading,
   } = useRemote<Product>("/mall/products/" + id, retry);
+  const selected = p?.variants?.find((v) => v.id === skuId && v.onSale && v.stock > 0);
+  const purchaseProduct = p && selected ? { ...p, skuId: selected.id, variantName: selected.name, price: selected.price, stock: selected.stock } : p;
+  const ready = Boolean(purchaseProduct?.stock && (!p?.hasVariants || selected));
   return (
     <section className="commerce-page">
       <button
@@ -487,7 +498,7 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
             <div className="detail-copy">
               <span className="small-tag">店铺好物</span>
               <h1>{p.name}</h1>
-              <p className="detail-price">¥ {money(p.price)}</p>
+              <p className="detail-price">¥ {money(purchaseProduct!.price)}{Boolean(p.hasVariants) && !selected && " 起"}</p>
               <p>{p.description || "店主正在准备更多商品介绍。"}</p>
               <p className="product-sales">
                 已售 {p.soldCount || 0} · {p.stock > 0 ? "现货" : "暂时售罄"}
@@ -497,7 +508,8 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
                 {p.specification && <span>{p.specification}</span>}
                 {p.origin && <span>产地·{p.origin}</span>}
               </div>
-              <p className="muted">可售库存 {p.stock} 件</p>
+              <p className="muted">{selected ? "当前规格库存" : "可售库存"} {purchaseProduct!.stock} 件</p>
+              {Boolean(p.hasVariants) && <VariantSelector variants={p.variants || []} selected={skuId} onSelect={setSkuId} />}
               <button
                 className="store-link"
                 onClick={() => props.onNavigate("store/" + p.shopId)}
@@ -509,15 +521,15 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
                 </span>
                 <ChevronRight size={18} />
               </button>
-              <ProductShopping product={p} props={props} />
+              <ProductShopping product={purchaseProduct!} props={props} />
               <button
                 className="primary purchase-button"
-                disabled={!p.stock}
+                disabled={!ready}
                 onClick={() =>
                   props.user ? setCheckout(true) : props.onLogin()
                 }
               >
-                {p.stock ? "立即购买" : "暂时售罄"}
+                {!p.stock ? "暂时售罄" : !ready ? "请先选择规格" : "立即购买"}
               </button>
               <div className="product-detail-copy">
                 <h3>商品详情</h3>
@@ -536,7 +548,7 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
           <ProductReviews productId={p.id} props={props} />
           {checkout && props.user && (
             <Checkout
-              product={p}
+              product={purchaseProduct!}
               onClose={() => setCheckout(false)}
               {...props}
             />
@@ -577,6 +589,7 @@ function Checkout({
           address,
           requestKey: key,
           expectedPrice: p.price,
+          skuId: p.skuId,
         }),
       });
       props.toast("订单已创建，请在我的订单中确认模拟支付");
@@ -608,6 +621,7 @@ function Checkout({
         </button>
       </div>
       <p>{p.name}</p>
+      {p.variantName && <p className="selected-variant">已选：{p.variantName}</p>}
       <form className="commerce-form" onSubmit={submit}>
         <fieldset disabled={busy}>
           <AddressPicker
@@ -810,6 +824,7 @@ export function Orders({
               </div>
               <div>
                 <h3>{o.productName}</h3>
+                {o.variantName && <p className="selected-variant">{o.variantName}</p>}
                 <p>
                   ¥ {money(o.unitPrice)} × {o.quantity}
                 </p>
@@ -927,7 +942,7 @@ export function VideoProducts({
           <span>
             <small>视频同款 · {data.length} 件好物</small>
             <strong>{p.name}</strong>
-            <b>¥ {money(p.price)}</b>
+            <b>¥ {money(p.price)}{Boolean(p.hasVariants) && " 起"}</b>
           </span>
         </button>
         <button
@@ -952,7 +967,7 @@ export function VideoProducts({
                 <ProductImage src={item.imageUrl} name={item.name} />
               </span>
               <strong>{item.name}</strong>
-              <b>¥ {money(item.price)}</b>
+              <b>¥ {money(item.price)}{Boolean(item.hasVariants) && " 起"}</b>
             </button>
           ))}
         </div>

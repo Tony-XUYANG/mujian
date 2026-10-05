@@ -82,6 +82,7 @@ const expire = (o) => {
       "'",
   );
 };
+let variantProduct;
 try {
   let r = await create();
   check(
@@ -127,6 +128,54 @@ try {
     "超时后再次取消不重复返库",
     (await req("/mall/products/" + p.id)).data.stock === 100,
   );
+  variantProduct = (await req("/shop/products", "POST", {
+    name: "规格超时验收商品", price: 29, stock: 12,
+  }, auth)).data;
+  const variantsPath = "/shop/products/" + variantProduct.id + "/variants";
+  let config = (await req(variantsPath, "PUT", {
+    version: variantProduct.version,
+    items: [
+      { name: "白色 / 小杯", price: 29, stock: 5, onSale: true },
+      { name: "蓝色 / 大杯", price: 39, stock: 7, onSale: true },
+    ],
+  }, auth)).data;
+  assert.equal(config.items?.length, 2);
+  const [white, blue] = config.items;
+  const buyVariant = (v) => req("/products/" + variantProduct.id + "/buy", "POST", {
+    quantity: 2, recipient: "虚拟用户", phone: "13800000000",
+    address: "仅供测试的虚拟地址", requestKey: randomUUID(),
+    skuId: v.id, expectedPrice: v.price,
+  }, auth);
+  r = await buyVariant(white);
+  check("规格订单仅预占所选库存", r.status === 201 &&
+    (await req(variantsPath, "GET", undefined, auth)).data.items[0].stock === 3);
+  config = (await req(variantsPath, "GET", undefined, auth)).data;
+  const stopped = await req(variantsPath, "PUT", {
+    version: config.version,
+    items: config.items.map(v => v.id === white.id ? { ...v, name: "米白 / 小杯", onSale: false } : v),
+  }, auth);
+  assert.equal(stopped.status, 200);
+  expire(r.data);
+  paid = await req("/me/orders/" + r.data.orderNo + "/demo-pay", "POST", undefined, auth);
+  config = (await req(variantsPath, "GET", undefined, auth)).data;
+  check("停售规格到期仍按原规格准确返库", paid.status === 200 &&
+    paid.data.status === "CANCELLED" && config.items[0].stock === 5 && config.items[1].stock === 7);
+  check("返还停售规格不增加可售汇总库存", (await req("/mall/products/" + variantProduct.id)).data.stock === 7);
+  check("超时订单保留购买时的规格名称", paid.data.variantName === white.name);
+  r = await buyVariant(blue);
+  assert.equal(r.status, 201);
+  expire(r.data);
+  const variantDeadline = Date.now() + 45000;
+  do {
+    status = (await req("/me/orders/" + r.data.orderNo, "GET", undefined, auth)).data.status;
+    if (status === "CANCELLED") break;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } while (Date.now() < variantDeadline);
+  config = (await req(variantsPath, "GET", undefined, auth)).data;
+  check("定时到期释放规格库存且不影响另一款", status === "CANCELLED" &&
+    config.items[0].stock === 5 && config.items[1].stock === 7);
+  await req("/me/orders/" + r.data.orderNo + "/cancel", "POST", undefined, auth);
+  check("规格超时后重复取消不多返", (await req(variantsPath, "GET", undefined, auth)).data.items[1].stock === 7);
   sql("UPDATE shop SET status='CLOSED' WHERE id=" + shop.id);
   check(
     "关闭店铺隐藏公开商品",
@@ -139,6 +188,7 @@ try {
   );
 } finally {
   sql("UPDATE shop SET status='ACTIVE' WHERE id=" + shop.id);
+  if (variantProduct?.id) await req("/shop/products/" + variantProduct.id + "/status", "PUT", { onSale: false }, auth);
   await req(
     "/shop/products/" + p.id + "/status",
     "PUT",

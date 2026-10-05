@@ -1,0 +1,123 @@
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+const require=createRequire(new URL("../frontend/package.json",import.meta.url));
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||"playwright");
+const base=process.env.APP_URL||"http://127.0.0.1:8080";
+const output=fileURLToPath(new URL("../docs/screenshots/variants/",import.meta.url));
+await mkdir(output,{recursive:true});
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||chromium.executablePath()});
+const context=await browser.newContext({viewport:{width:1440,height:1000}});
+const page=await context.newPage();
+const errors=[];page.on("pageerror",e=>errors.push(e.message));
+let count=0,seller,buyer,product;
+function check(name,ok){assert.ok(ok,name);console.log("PASS "+ ++count+": "+name);}
+async function req(path,method="GET",data,token){const r=await context.request.fetch(base+"/api"+path,{method,data,headers:token?{Authorization:"Bearer "+token}:{}});assert.ok(r.ok(),path+" "+r.status()+" "+await r.text());return r.json();}
+async function user(label){const username="选款"+label+Date.now().toString(36);return {username,...await req("/auth/register","POST",{username,nickname:label,password:"Shopping123!"})};}
+async function login(u){await page.getByRole("button",{name:"登录 / 注册",exact:true}).last().click();await page.getByLabel("用户名",{exact:true}).fill(u.username);await page.getByLabel("密码",{exact:true}).fill("Shopping123!");await page.getByRole("button",{name:"登录幕间",exact:true}).click();await page.getByRole("button",{name:"退出登录",exact:true}).waitFor();}
+async function shot(name){await page.locator(".toast").waitFor({state:"hidden"});await page.screenshot({path:output+name+".jpg",type:"jpeg",quality:86,fullPage:page.viewportSize().width>600});}
+const fits=()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1);
+try{
+ seller=await user("店主");buyer=await user("买家");
+ await req("/shop/register","POST",{name:"暖日好物 · 规格体验"},seller.token);
+ product=await req("/shop/products","POST",{name:"暖日随行杯",price:29.9,stock:8,imageUrl:"/media/shop-cup.svg",description:"选择喜欢的款式，装满每个放松时刻。虚拟验收商品。"},seller.token);
+ await page.goto(base+"/#merchant");await login(seller);
+ await page.getByRole("button",{name:"规格库存",exact:true}).click();
+ const modal=page.getByRole("dialog",{name:"规格库存",exact:true});
+ await modal.getByLabel("规格名称1",{exact:true}).waitFor();
+ await modal.getByRole("button",{name:"保存规格",exact:true}).click();
+ await modal.getByRole("alert").waitFor();
+ check("空规格名称显示中文校验",(await modal.getByRole("alert").innerText()).includes("规格名称"));
+ await modal.getByLabel("规格名称1",{exact:true}).fill("奶油白 / 350毫升");
+ await modal.getByLabel("规格售价1",{exact:true}).fill("29.9");
+ await modal.getByLabel("规格库存1",{exact:true}).fill("8");
+ await modal.getByRole("button",{name:"添加规格",exact:true}).click();
+ await modal.getByLabel("规格名称2",{exact:true}).fill("雾蓝 / 500毫升");
+ await modal.getByLabel("规格售价2",{exact:true}).fill("39.9");
+ await modal.getByLabel("规格库存2",{exact:true}).fill("6");
+ await modal.getByRole("button",{name:"添加规格",exact:true}).click();
+ await modal.getByLabel("规格名称3",{exact:true}).fill("曜石黑 / 500毫升");
+ await modal.getByLabel("规格售价3",{exact:true}).fill("49.9");
+ await modal.getByLabel("规格库存3",{exact:true}).fill("0");
+ await modal.getByRole("button",{name:"保存规格",exact:true}).click();await modal.waitFor({state:"hidden"});
+ let configuration=await req("/shop/products/"+product.id+"/variants","GET",undefined,seller.token);
+ const [white,blue]=configuration.items;
+ check("商家表单保存三种规格及独立库存",configuration.items.length===3&&white.stock===8&&blue.price===39.9);
+ await page.getByRole("button",{name:"规格库存",exact:true}).click();
+ await modal.getByLabel("规格名称1",{exact:true}).waitFor();
+ check("规格编辑重新打开数据持久化",await modal.getByLabel("规格名称2").inputValue()===blue.name);
+ await modal.getByLabel("规格库存1",{exact:true}).fill("7");
+ await shot("desktop-merchant-variants");
+ await page.setViewportSize({width:320,height:844});
+ check("320px商家规格表单无溢出",await fits());await shot("mobile-320-merchant-variants");
+ await modal.getByRole("button",{name:"保存规格",exact:true}).click();await modal.waitFor({state:"hidden"});
+ await page.getByRole("button",{name:"退出登录",exact:true}).click();
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto(base+"/#product/"+product.id);
+ const picker=page.getByRole("region",{name:"商品规格"});
+ await picker.getByRole("button").first().waitFor();
+ check("未选规格无法直接加购或购买",await page.getByRole("button",{name:"请先选择规格",exact:true}).isDisabled()&&await page.getByRole("button",{name:"加入购物车",exact:true}).isDisabled());
+ check("售罄规格不可选择",await picker.getByRole("button",{name:/曜石黑/}).isDisabled());
+ await login(buyer);await picker.getByRole("button",{name:/奶油白/}).click();
+ check("选择规格更新售价库存",(await page.locator(".detail-price").innerText()).includes("29.90")&&(await page.locator(".detail-copy").innerText()).includes("当前规格库存 7 件"));
+ await page.getByRole("button",{name:"加入购物车",exact:true}).click();await page.locator(".toast").filter({hasText:"已加入购物车"}).waitFor();
+ await picker.getByRole("button",{name:/雾蓝/}).click();
+ check("切换规格同步价格",(await page.locator(".detail-price").innerText()).includes("39.90"));
+ await shot("desktop-product-variants");
+ await page.getByRole("button",{name:"立即购买",exact:true}).click();
+ const checkout=page.getByRole("dialog",{name:"确认订单",exact:true});
+ await checkout.getByText("已选：雾蓝 / 500毫升",{exact:true}).waitFor();
+ check("立即购买确认所选款式",(await checkout.locator(".order-total").innerText()).includes("39.90"));
+ await page.getByRole("button",{name:"关闭结算",exact:true}).click();
+ await page.getByRole("button",{name:"加入购物车",exact:true}).click();await page.locator(".toast").filter({hasText:"已加入购物车"}).waitFor();
+ await page.getByRole("button",{name:"打开购物车",exact:true}).click();
+ await page.locator(".cart-line").nth(1).waitFor();
+ check("两种规格在购物车独立展示",await page.locator(".cart-line").count()===2);
+ await page.getByRole("button",{name:"增加暖日随行杯 · 奶油白 / 350毫升",exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector(".cart-checkout-bar")?.textContent.includes("99.70"));
+ check("单规格数量调整和金额正确",true);
+ await page.getByLabel("选择暖日随行杯 · 雾蓝 / 500毫升",{exact:true}).uncheck();
+ check("勾选按规格独立",await page.getByLabel("选择暖日随行杯 · 奶油白 / 350毫升",{exact:true}).isChecked());
+ await page.getByLabel("选择暖日随行杯 · 雾蓝 / 500毫升",{exact:true}).check();
+ await shot("desktop-variant-cart");
+ await req("/me/addresses","POST",{recipient:"虚拟买家",phone:"13800000000",region:"演示省 演示市",detail:"演示路100号虚拟地址",label:"家",isDefault:true},buyer.token);
+ await page.getByRole("button",{name:"去结算 (2)",exact:true}).click();
+ const cartCheckout=page.getByRole("dialog",{name:"购物车结算"});
+ await cartCheckout.getByLabel("选择已保存地址").waitFor();
+ check("结算确认列出两种款式",(await cartCheckout.innerText()).includes(white.name)&&(await cartCheckout.innerText()).includes(blue.name));
+ await cartCheckout.getByRole("button",{name:"提交演示订单",exact:true}).click();
+ await page.locator(".order-card").nth(1).waitFor();
+ check("订单分别保留两种规格",(await page.locator(".order-list").innerText()).includes(white.name)&&(await page.locator(".order-list").innerText()).includes(blue.name));
+ await page.locator(".order-detail-trigger").first().click();
+ await page.getByRole("dialog",{name:"订单详情"}).locator(".selected-variant").waitFor();
+ check("订单详情展示规格快照",true);await shot("desktop-variant-order");
+ await page.getByRole("button",{name:"关闭订单详情"}).click();
+ const list=await req("/me/orders","GET",undefined,buyer.token);
+ for(const o of list)await req("/me/orders/"+o.orderNo+"/cancel","POST",undefined,buyer.token);
+ for(const width of [390,320]){
+   await page.setViewportSize({width,height:844});await page.goto(base+"/#product/"+product.id);
+   await picker.getByRole("button",{name:/雾蓝/}).click();await picker.scrollIntoViewIfNeeded();
+   check(width+"px规格选择无横向溢出",await fits());await shot("mobile-"+width+"-product-variants");
+   await req("/me/cart/"+product.id,"POST",{quantity:1,skuId:white.id},buyer.token);
+   await req("/me/cart/"+product.id,"POST",{quantity:1,skuId:blue.id},buyer.token);
+   await page.goto(base+"/#cart");await page.locator(".cart-line").nth(1).waitFor();
+   check(width+"px多规格购物车无溢出",await fits());await shot("mobile-"+width+"-variant-cart");
+ }
+ await page.getByRole("button",{name:"移除暖日随行杯 · 奶油白 / 350毫升",exact:true}).click();
+ await page.waitForFunction(()=>document.querySelectorAll(".cart-line").length===1);
+ check("删除只移除当前规格",(await page.locator(".cart-line").innerText()).includes(blue.name));
+ configuration=await req("/shop/products/"+product.id+"/variants","GET",undefined,seller.token);
+ await req("/shop/products/"+product.id+"/variants","PUT",{version:configuration.version,items:configuration.items.map(v=>v.id===blue.id?{...v,onSale:false}:v)},seller.token);
+ await page.getByRole("button",{name:"刷新购物车",exact:true}).click();
+ await page.getByText("商品或规格已停售，或店铺已关闭",{exact:true}).waitFor();
+ check("停售规格保留并禁止结算",await page.getByLabel("选择暖日随行杯 · 雾蓝 / 500毫升",{exact:true}).isDisabled());
+ check("浏览器无脚本异常",errors.length===0);
+} catch(e) {
+ await page.screenshot({path:output+"failure.png",fullPage:true});throw e;
+} finally {
+ if(buyer)for(const o of await req("/me/orders","GET",undefined,buyer.token))if(o.status==="PENDING")await req("/me/orders/"+o.orderNo+"/cancel","POST",undefined,buyer.token);
+ if(product)await req("/shop/products/"+product.id+"/status","PUT",{onSale:false},seller.token);
+ await browser.close();
+}
+console.log("\n"+count+" variant browser checks passed.");

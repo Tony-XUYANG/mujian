@@ -21,8 +21,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class ShoppingController {
     private final JdbcTemplate db;
     private final CommerceOrders orders;
-    public ShoppingController(JdbcTemplate db,CommerceOrders orders){this.db=db;this.orders=orders;}
-    public record Quantity(@Min(value=1,message="至少选择1件") @Max(value=99,message="单件商品最多99件") int quantity){}
+    private final ProductVariants variants;
+    public ShoppingController(JdbcTemplate db,CommerceOrders orders,ProductVariants variants){this.db=db;this.orders=orders;this.variants=variants;}
+    public record Quantity(@Min(value=1,message="至少选择1件") @Max(value=99,message="单件商品最多99件") int quantity,
+        @Positive(message="规格编号不正确") Long skuId){}
     public record AddressInput(
         @NotBlank(message="请输入收货人") @Size(max=40,message="收货人最多40字") String recipient,
         @NotBlank(message="请输入联系电话") @Pattern(regexp="[0-9+ ()-]{6,24}",message="请输入有效联系电话") String phone,
@@ -32,40 +34,46 @@ public class ShoppingController {
         boolean isDefault){}
     public record CheckoutLine(@Positive(message="商品编号不正确") long productId,
         @Min(value=1,message="至少选择1件") @Max(value=99,message="单件商品最多99件") int quantity,
-        @NotNull(message="请重新确认商品价格") @DecimalMin(value="0.01",message="价格不正确") @Digits(integer=8,fraction=2,message="价格最多两位小数") BigDecimal expectedPrice){}
+        @NotNull(message="请重新确认商品价格") @DecimalMin(value="0.01",message="价格不正确") @Digits(integer=8,fraction=2,message="价格最多两位小数") BigDecimal expectedPrice,
+        @Positive(message="规格编号不正确") Long skuId){}
     public record CheckoutInput(@Positive(message="请选择收货地址") long addressId,
         @NotEmpty(message="请选择结算商品") @Size(max=20,message="一次最多结算20种商品") List<@NotNull(message="结算商品不能为空") @Valid CheckoutLine> items,
         @NotBlank(message="缺少结算标识") @Pattern(regexp="[A-Za-z0-9_-]{16,64}",message="结算标识不正确") String requestKey){}
 
     @GetMapping("/cart")
     public List<Map<String,Object>> cart(@AuthenticationPrincipal Jwt jwt) {
-        return db.queryForList(StoreController.PRODUCT.replace("SELECT p.id", "SELECT c.quantity,(p.status='ON_SALE' AND s.status='ACTIVE') AS available,p.id")+"""
+        var rows=db.queryForList(StoreController.PRODUCT.replace("SELECT p.id", "SELECT c.quantity,(p.status='ON_SALE' AND s.status='ACTIVE' AND NOT EXISTS(SELECT 1 FROM product_variant v WHERE v.product_id=p.id)) AS available,p.id")+"""
              JOIN shopping_cart c ON c.product_id=p.id WHERE c.user_id=? ORDER BY c.updated_at DESC,p.id DESC
             """,uid(jwt));
+        rows.addAll(db.queryForList(StoreController.PRODUCT
+            .replace("SELECT p.id", "SELECT c.quantity,v.id AS skuId,v.name AS variantName,(p.status='ON_SALE' AND s.status='ACTIVE' AND v.on_sale=true) AS available,p.id")
+            .replace("p.price,p.stock", "v.price,v.stock")+
+            " JOIN product_variant v ON v.product_id=p.id JOIN variant_cart c ON c.variant_id=v.id WHERE c.user_id=? ORDER BY c.updated_at DESC,v.id DESC",uid(jwt)));
+        return rows;
     }
     @PostMapping("/cart/{id}") @Transactional
     public Map<String,Object> add(@PathVariable long id,@Valid @RequestBody Quantity in,@AuthenticationPrincipal Jwt jwt) {
         long user=uid(jwt);lockUser(user);
-        var old=db.queryForList("SELECT quantity FROM shopping_cart WHERE user_id=? AND product_id=?",Integer.class,user,id);
+        var old=cartQuantity(user,id,in.skuId());
         int quantity=in.quantity()+(old.isEmpty()?0:old.getFirst());
         if(quantity>99)throw conflict("购物车中该商品最多99件");
-        if(old.isEmpty()&&db.queryForObject("SELECT COUNT(*) FROM shopping_cart WHERE user_id=?",Integer.class,user)>=100)throw conflict("购物车最多100种商品，请先清理");
+        if(old.isEmpty()&&db.queryForObject("SELECT (SELECT COUNT(*) FROM shopping_cart WHERE user_id=?)+(SELECT COUNT(*) FROM variant_cart WHERE user_id=?)",Integer.class,user,user)>=100)throw conflict("购物车最多100种商品规格，请先清理");
         var p=availableProduct(id);
-        if(number(p,"stock")<quantity)throw conflict("库存不足，请调整购买数量");
-        db.update("INSERT INTO shopping_cart(user_id,product_id,quantity) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantity=VALUES(quantity)",user,id,quantity);
+        if(variants.choose(p,in.skuId()).stock()<quantity)throw conflict("库存不足，请调整购买数量");
+        writeCart(user,id,in.skuId(),quantity);
         return Map.of("quantity",quantity);
     }
     @PutMapping("/cart/{id}") @Transactional
     public Map<String,Object> quantity(@PathVariable long id,@Valid @RequestBody Quantity in,@AuthenticationPrincipal Jwt jwt) {
         long user=uid(jwt);lockUser(user);
-        if(db.queryForList("SELECT product_id FROM shopping_cart WHERE user_id=? AND product_id=?",user,id).isEmpty())throw missing("购物车中没有这件商品");
-        var p=availableProduct(id);if(number(p,"stock")<in.quantity())throw conflict("库存不足，请调整购买数量");
-        db.update("UPDATE shopping_cart SET quantity=? WHERE user_id=? AND product_id=?",in.quantity(),user,id);
+        if(cartQuantity(user,id,in.skuId()).isEmpty())throw missing("购物车中没有这件商品规格");
+        var p=availableProduct(id);if(variants.choose(p,in.skuId()).stock()<in.quantity())throw conflict("库存不足，请调整购买数量");
+        writeCart(user,id,in.skuId(),in.quantity());
         return Map.of("quantity",in.quantity());
     }
     @DeleteMapping("/cart/{id}") @Transactional
-    public Map<String,Boolean> remove(@PathVariable long id,@AuthenticationPrincipal Jwt jwt) {
-        lockUser(uid(jwt));db.update("DELETE FROM shopping_cart WHERE user_id=? AND product_id=?",uid(jwt),id);return Map.of("removed",true);
+    public Map<String,Boolean> remove(@PathVariable long id,@RequestParam(required=false) Long skuId,@AuthenticationPrincipal Jwt jwt) {
+        lockUser(uid(jwt));deleteCart(uid(jwt),id,skuId);return Map.of("removed",true);
     }
     @GetMapping("/product-favorites")
     public List<Map<String,Object>> favorites(@AuthenticationPrincipal Jwt jwt) {
@@ -117,8 +125,8 @@ public class ShoppingController {
     @PostMapping("/cart/checkout") @ResponseStatus(HttpStatus.CREATED) @Transactional
     public Map<String,Object> checkout(@Valid @RequestBody CheckoutInput in,@AuthenticationPrincipal Jwt jwt) {
         long buyer=uid(jwt);lockUser(buyer);
-        var lines=in.items().stream().sorted(Comparator.comparingLong(CheckoutLine::productId)).toList();
-        if(lines.stream().map(CheckoutLine::productId).distinct().count()!=lines.size())throw conflict("结算商品不能重复");
+        var lines=in.items().stream().sorted(Comparator.comparingLong(CheckoutLine::productId).thenComparing(l->l.skuId()==null?0L:l.skuId())).toList();
+        if(lines.stream().map(l->l.productId()+":"+l.skuId()).distinct().count()!=lines.size())throw conflict("结算商品规格不能重复");
         String hash=fingerprint(in.addressId(),lines);
         var previous=db.queryForList("SELECT id,payload_hash FROM checkout_batch WHERE buyer_id=? AND request_key=?",buyer,in.requestKey());
         if(!previous.isEmpty()){
@@ -127,19 +135,20 @@ public class ShoppingController {
         }
         var addr=address(in.addressId(),buyer);
         for(var line:lines) {
-            var cart=db.queryForList("SELECT quantity FROM shopping_cart WHERE user_id=? AND product_id=?",Integer.class,buyer,line.productId());
+            var cart=cartQuantity(buyer,line.productId(),line.skuId());
             if(cart.isEmpty()||cart.getFirst()!=line.quantity())throw conflict("购物车已变化，请刷新后重新结算");
             var p=availableProduct(line.productId());
-            if(number(p,"stock")<line.quantity())throw conflict("「"+p.get("name")+"」库存不足，请返回购物车调整");
-            if(((BigDecimal)p.get("price")).compareTo(line.expectedPrice())!=0)throw conflict("商品价格已变化，请返回购物车确认新价格");
+            var choice=variants.choose(p,line.skuId());
+            if(choice.stock()<line.quantity())throw conflict("「"+p.get("name")+"」库存不足，请返回购物车调整");
+            if(choice.price().compareTo(line.expectedPrice())!=0)throw conflict("商品价格已变化，请返回购物车确认新价格");
         }
         long batchId=insert("INSERT INTO checkout_batch(buyer_id,request_key,payload_hash) VALUES (?,?,?)",buyer,in.requestKey(),hash);
         for(var line:lines) {
             String request=UUID.randomUUID().toString();
             var order=orders.create(buyer,line.productId(),new OrderController.BuyInput(line.quantity(),(String)addr.get("recipient"),(String)addr.get("phone"),
-                addr.get("region")+" "+addr.get("detail"),request,line.expectedPrice()));
+                addr.get("region")+" "+addr.get("detail"),request,line.expectedPrice(),line.skuId()));
             db.update("INSERT INTO checkout_batch_item(batch_id,order_no) VALUES (?,?)",batchId,order.get("orderNo"));
-            db.update("DELETE FROM shopping_cart WHERE user_id=? AND product_id=?",buyer,line.productId());
+            deleteCart(buyer,line.productId(),line.skuId());
         }
         return batch(batchId);
     }
@@ -147,6 +156,18 @@ public class ShoppingController {
         var rows=db.queryForList(CommerceOrders.SELECT+" JOIN checkout_batch_item b ON b.order_no=o.order_no WHERE b.batch_id=? ORDER BY o.id",id);
         BigDecimal total=rows.stream().map(o->(BigDecimal)o.get("totalAmount")).reduce(BigDecimal.ZERO,BigDecimal::add);
         return Map.of("batchId",id,"orders",rows,"totalAmount",total);
+    }
+    private List<Integer> cartQuantity(long user,long product,Long sku) {
+        if(sku==null)return db.queryForList("SELECT quantity FROM shopping_cart WHERE user_id=? AND product_id=?",Integer.class,user,product);
+        return db.queryForList("SELECT c.quantity FROM variant_cart c JOIN product_variant v ON v.id=c.variant_id WHERE c.user_id=? AND v.product_id=? AND v.id=?",Integer.class,user,product,sku);
+    }
+    private void writeCart(long user,long product,Long sku,int quantity) {
+        if(sku==null)db.update("INSERT INTO shopping_cart(user_id,product_id,quantity) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantity=VALUES(quantity)",user,product,quantity);
+        else db.update("INSERT INTO variant_cart(user_id,variant_id,quantity) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantity=VALUES(quantity)",user,sku,quantity);
+    }
+    private void deleteCart(long user,long product,Long sku) {
+        if(sku==null)db.update("DELETE FROM shopping_cart WHERE user_id=? AND product_id=?",user,product);
+        else db.update("DELETE c FROM variant_cart c JOIN product_variant v ON v.id=c.variant_id WHERE c.user_id=? AND v.product_id=? AND v.id=?",user,product,sku);
     }
     private List<Map<String,Object>> addressList(long user) {return db.queryForList("SELECT id,recipient,phone,region,detail,label,is_default AS isDefault FROM shipping_address WHERE user_id=? ORDER BY is_default DESC,id DESC",user);}
     private Map<String,Object> address(long id,long user) {
@@ -163,7 +184,7 @@ public class ShoppingController {
     private long uid(Jwt jwt){return DramaController.userId(jwt);}
     private long number(Map<String,Object> row,String key){return ((Number)row.get(key)).longValue();}
     private String fingerprint(long address,List<CheckoutLine> lines){
-        String content=address+"|"+lines.stream().map(l->l.productId()+":"+l.quantity()+":"+l.expectedPrice().stripTrailingZeros().toPlainString()).reduce("",(a,b)->a+"|"+b);
+        String content=address+"|"+lines.stream().map(l->l.productId()+":"+l.quantity()+":"+l.expectedPrice().stripTrailingZeros().toPlainString()+(l.skuId()==null?"":":sku="+l.skuId())).reduce("",(a,b)->a+"|"+b);
         try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8)));}
         catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}
     }

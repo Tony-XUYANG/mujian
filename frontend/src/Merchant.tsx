@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { api, type DramaInput } from "./api";
 import { Modal } from "./Modal";
+import { VariantManager } from "./Variants";
 import { productCategories } from "./Shopping";
 import {
   CommerceLogin,
@@ -28,6 +29,7 @@ export function Merchant(props: CommerceProps & { initialTab?: string }) {
   const [retry, setRetry] = useState(0),
     [tab, setTab] = useState(props.initialTab || "products"),
     [editing, setEditing] = useState<Product | null | undefined>(),
+    [variantProduct, setVariantProduct] = useState<Product | null>(null),
     [shopEdit, setShopEdit] = useState(false),
     [publish, setPublish] = useState(false),
     [links, setLinks] = useState<Video | null>(null),
@@ -195,6 +197,7 @@ export function Merchant(props: CommerceProps & { initialTab?: string }) {
                           </span>
                         </div>
                         <div className="merchant-product-actions">
+                          <button className="secondary" onClick={() => setVariantProduct(p)}>规格库存</button>
                           <button
                             className="secondary"
                             onClick={() => setEditing(p)}
@@ -295,6 +298,7 @@ export function Merchant(props: CommerceProps & { initialTab?: string }) {
                 />
               </Modal>
             )}
+            {variantProduct && <VariantManager product={variantProduct} onClose={() => setVariantProduct(null)} onSaved={() => { setVariantProduct(null); refresh(); props.toast("规格和库存已保存"); }} />}
             {shopEdit && (
               <Modal
                 label="店铺资料"
@@ -578,6 +582,7 @@ function ProductForm({
               max="99999999.99"
               step="0.01"
               value={form.price}
+              readOnly={Boolean(p?.hasVariants)}
               onChange={(e) =>
                 setForm({ ...form, price: Number(e.target.value) })
               }
@@ -592,12 +597,14 @@ function ProductForm({
               max="999999"
               step="1"
               value={form.stock}
+              readOnly={Boolean(p?.hasVariants)}
               onChange={(e) =>
                 setForm({ ...form, stock: Number(e.target.value) })
               }
             />
           </label>
         </div>
+        {Boolean(p?.hasVariants) && <p className="commerce-note">价格和库存由各规格汇总，请在商品列表的“规格库存”中修改。</p>}
         <div className="commerce-field-row">
           <label>
             商品材质
