@@ -1,10 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Plus, X } from "lucide-react";
 import { api } from "./api";
 import { Modal } from "./Modal";
 import { LoadState, money, useRemote, type Product } from "./Commerce";
 
-export type Variant = { id: number; productId: number; name: string; price: number; stock: number; onSale: boolean | number };
+export type Variant = { id: number; productId: number; name: string; price: number; stock: number; onSale: boolean | number; valueIds?: number[] };
+export type AttributeValue = { id?: number; attributeId?: number; value: string; sortOrder?: number };
+export type AttributeGroup = { id?: number; productId?: number; name: string; sortOrder?: number; values: AttributeValue[] };
+type MatrixDraft = { id?: number; valueIds: number[]; price: number; stock: number; onSale: boolean };
 type Draft = { id?: number; name: string; price: number; stock: number; onSale: boolean };
 export function VariantSelector({ variants, selected, onSelect }: { variants: Variant[]; selected: number | null; onSelect: (id: number) => void }) {
   return <section className="variant-picker" aria-label="商品规格">
@@ -14,6 +17,39 @@ export function VariantSelector({ variants, selected, onSelect }: { variants: Va
       onClick={() => onSelect(v.id)}>
       <strong>{v.name}</strong><span>¥ {money(v.price)} · {!v.onSale ? "已停售" : v.stock ? "剩余" + v.stock + "件" : "售罄"}</span>
     </button>)}</div>
+  </section>;
+}
+
+/** Selects one value from each attribute group and resolves a concrete SKU. */
+export function AttributeSelector({ groups, variants, selected, onSelect }: { groups: AttributeGroup[]; variants: Variant[]; selected: number | null; onSelect: (id: number | null) => void }) {
+  const [chosen, setChosen] = useState<Record<string, number>>({});
+  const matrix = variants.filter(v => (v.valueIds?.length || 0) === groups.length);
+  useEffect(() => {
+    const current = variants.find(v => v.id === selected && v.valueIds?.length === groups.length);
+    if (!current) return;
+    const next: Record<string, number> = {};
+    groups.forEach((g, i) => { next[String(g.id ?? i)] = current.valueIds![i]; });
+    setChosen(next);
+  }, [selected, variants, groups]);
+  function pick(index: number, valueId: number) {
+    const next = { ...chosen, [String(groups[index].id ?? index)]: valueId };
+    setChosen(next);
+    const complete = groups.every((g, i) => next[String(g.id ?? i)] !== undefined);
+    if (!complete) { onSelect(null); return; }
+    const sku = matrix.find(v => groups.every((g, i) => v.valueIds![i] === next[String(g.id ?? i)]));
+    onSelect(sku?.id ?? null);
+  }
+  return <section className="variant-picker attribute-picker" aria-label="商品属性">
+    <h3>选择款式 <small>按属性组合选择</small></h3>
+    {groups.map((group, gi) => <div className="attribute-group" key={group.id || "new-" + gi}>
+      <strong>{group.name}</strong>
+      <div>{group.values.map(value => {
+        const key = String(group.id ?? gi);
+        const active = matrix.some(v => v.onSale && v.stock > 0 && v.valueIds?.[gi] === value.id && groups.every((g, i) => !chosen[String(g.id ?? i)] || v.valueIds?.[i] === chosen[String(g.id ?? i)]));
+        return <button type="button" key={value.id || value.value} aria-pressed={chosen[key] === value.id} disabled={!active} className={chosen[key] === value.id ? "selected" : ""} onClick={() => value.id && pick(gi, value.id)}>{value.value}</button>;
+      })}</div>
+    </div>)}
+    {selected && <p className="selected-variant">已选组合：{variants.find(v => v.id === selected)?.name}</p>}
   </section>;
 }
 export function VariantManager({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
@@ -62,5 +98,88 @@ function VariantForm({ product, data, onSaved, onBusy }: { product: Product; dat
     </fieldset>
     {error && <p className="form-error" role="alert">{error}</p>}
     <button className="primary" disabled={busy}>{busy ? "保存中…" : "保存规格"}</button>
+  </form>;
+}
+
+export function AttributeMatrixManager({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
+  const [retry, setRetry] = useState(0), [busy, setBusy] = useState(false);
+  const { data, error, loading } = useRemote<AttributeMatrixData>("/shop/products/" + product.id + "/attributes", retry);
+  const close = () => { if (!busy) onClose(); };
+  return <Modal label="属性组合" className="commerce-modal attribute-modal" onClose={close}>
+    <div className="commerce-modal-heading"><h2>属性组合</h2><button className="icon-button" aria-label="关闭属性组合" disabled={busy} onClick={close}><X /></button></div>
+    <p>{product.name}</p>
+    <LoadState loading={loading} error={error} retry={() => setRetry(n => n + 1)} />
+    {data && <AttributeMatrixForm product={product} data={data} onSaved={onSaved} onBusy={setBusy} />}
+  </Modal>;
+}
+
+export type AttributeMatrixData = { version: number; groups: AttributeGroup[]; variants: Variant[]; limits?: { maxGroups: number; maxValuesPerGroup: number; maxCombinations: number } };
+
+function AttributeMatrixForm({ product, data, onSaved, onBusy }: { product: Product; data: AttributeMatrixData; onSaved: () => void; onBusy: (busy: boolean) => void }) {
+  const [groups, setGroups] = useState<AttributeGroup[]>(() => data.groups.length ? data.groups.map(g => ({ ...g, values: g.values.map(v => ({ ...v })) })) : [{ name: "颜色", values: [{ value: "" }] }]);
+  const [rows, setRows] = useState<MatrixDraft[]>(() => data.variants.filter(v => v.valueIds?.length).map(v => ({ id: v.id, valueIds: v.valueIds!, price: v.price, stock: v.stock, onSale: Boolean(v.onSale) })));
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const maxGroups = data.limits?.maxGroups || 3, maxValues = data.limits?.maxValuesPerGroup || 10, maxCombinations = data.limits?.maxCombinations || 20;
+  function editGroup(index: number, patch: Partial<AttributeGroup>) { setGroups(old => old.map((g, i) => i === index ? { ...g, ...patch } : g)); }
+  function editValue(gi: number, vi: number, patch: Partial<AttributeValue>) { setGroups(old => old.map((g, i) => i === gi ? { ...g, values: g.values.map((v, n) => n === vi ? { ...v, ...patch } : v) } : g)); }
+  function addGroup() { if (groups.length < maxGroups) setGroups(old => [...old, { name: "", values: [{ value: "" }] }]); }
+  function addValue(gi: number) { if (groups[gi].values.length < maxValues) editGroup(gi, { values: [...groups[gi].values, { value: "" }] }); }
+  function removeGroup(gi: number) { if (!groups[gi].id) setGroups(old => old.filter((_, i) => i !== gi)); }
+  function removeValue(gi: number, vi: number) { if (!groups[gi].values[vi].id) editGroup(gi, { values: groups[gi].values.filter((_, i) => i !== vi) }); }
+  function generate() {
+    setError("");
+    if (!groups.length || groups.some(g => !g.name.trim() || !g.values.length || g.values.some(v => !v.value.trim()))) { setError("请先填写属性组和属性值"); return; }
+    const combinations = groups.reduce<number[][]>((all, g, gi) => all.flatMap(prefix => g.values.map((v, vi) => [...prefix, v.id || -(vi + 1)])), [[]]);
+    if (combinations.length > maxCombinations) { setError("属性组合超过20种，请减少属性值"); return; }
+    const old = new Map(rows.map(r => [r.valueIds.slice().sort((a,b) => a-b).join(","), r]));
+    const legacy = new Map(data.variants.filter(v => v.valueIds?.length).map(v => [v.valueIds!.slice().sort((a,b) => a-b).join(","), v]));
+    setRows(combinations.map(valueIds => {
+      const key = valueIds.slice().sort((a,b) => a-b).join(",");
+      const previous = old.get(key), saved = legacy.get(key);
+      return previous || (saved ? { id: saved.id, valueIds, price: saved.price, stock: saved.stock, onSale: Boolean(saved.onSale) } : { valueIds, price: product.price, stock: 0, onSale: true });
+    }));
+  }
+  async function save(e: FormEvent) {
+    e.preventDefault(); if (busy) return;
+    if (!groups.length || groups.some(g => !g.name.trim() || !g.values.length || g.values.some(v => !v.value.trim()))) { setError("请先填写属性组和属性值"); return; }
+    if (!rows.length || rows.length > maxCombinations) { setError("请先生成有效的属性组合"); return; }
+    if (rows.some(r => !Number.isFinite(r.price) || r.price <= 0 || !Number.isInteger(r.stock) || r.stock < 0)) { setError("请填写有效的组合价格和非负整数库存"); return; }
+    if (rows.reduce((total, r) => total + r.stock, 0) > 999999) { setError("全部规格库存合计不能超过999999"); return; }
+    setBusy(true); onBusy(true); setError("");
+    try {
+      await api("/shop/products/" + product.id + "/attributes", { method: "PUT", body: JSON.stringify({ version: data.version, groups: groups.map((g, gi) => ({ ...g, id: g.id, name: g.name.trim(), values: g.values.map((v, vi) => ({ ...v, value: v.value.trim(), sortOrder: vi })) })), variants: rows.map(r => ({ ...r, valueIds: r.valueIds.filter(Boolean) })) }) });
+      onSaved();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); onBusy(false); }
+  }
+  return <form className="commerce-form attribute-form" onSubmit={save} noValidate>
+    <p className="commerce-note">分别维护颜色、容量等属性，系统自动生成组合。最多3组属性、每组10个值、20种组合；已保存属性不能删除，历史订单会保留原组合。</p>
+    <fieldset disabled={busy}>
+      <div className="attribute-editor-groups">
+        {groups.map((g, gi) => <section className="attribute-editor-group" key={g.id || "new-group-" + gi}>
+          <div className="variant-row-title"><strong>属性组 {gi + 1}</strong>{!g.id && <button type="button" className="icon-button" aria-label="移除属性组" onClick={() => removeGroup(gi)}><X size={16} /></button>}</div>
+          <label>属性名称<input aria-label={"属性组名称" + (gi + 1)} maxLength={40} placeholder="如：颜色、容量" value={g.name} onChange={e => editGroup(gi, { name: e.target.value })} /></label>
+          <div className="attribute-values">
+            {g.values.map((v, vi) => <div className="attribute-value-row" key={v.id || "new-value-" + vi}>
+              <input aria-label={g.name + "属性值" + (vi + 1)} maxLength={60} placeholder="如：奶油白" value={v.value} onChange={e => editValue(gi, vi, { value: e.target.value })} />
+              {!v.id && <button type="button" className="icon-button" aria-label="移除属性值" onClick={() => removeValue(gi, vi)}><X size={15} /></button>}
+            </div>)}
+          </div>
+          <button type="button" className="secondary compact-button" disabled={g.values.length >= maxValues} onClick={() => addValue(gi)}><Plus size={15} />添加属性值</button>
+        </section>)}
+      </div>
+      <div className="attribute-form-actions"><button type="button" className="secondary" disabled={groups.length >= maxGroups} onClick={addGroup}><Plus size={16} />添加属性组</button><button type="button" className="secondary" onClick={generate}>生成组合</button></div>
+      {rows.length > 0 && <div className="attribute-combination-table" aria-label="组合规格编辑">
+        <div className="attribute-combination-head"><strong>组合</strong><strong>售价</strong><strong>库存</strong><strong>状态</strong></div>
+        {rows.map((r, i) => <div className="attribute-combination-row" key={r.id || r.valueIds.join("-") }>
+          <strong>{r.valueIds.map((id, gi) => groups[gi]?.values.find((v, vi) => (v.id || -(vi + 1)) === id)?.value || "待生成").join(" / ")}</strong>
+          <input aria-label={"组合售价" + (i + 1)} type="number" min="0.01" step="0.01" value={r.price} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, price: Number(e.target.value) } : x))} />
+          <input aria-label={"组合库存" + (i + 1)} type="number" min="0" step="1" value={r.stock} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, stock: Number(e.target.value) } : x))} />
+          <label className="commerce-check"><input type="checkbox" checked={r.onSale} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, onSale: e.target.checked } : x))} />在售</label>
+        </div>)}
+      </div>}
+    </fieldset>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <button className="primary" disabled={busy}>{busy ? "保存中…" : "保存属性组合"}</button>
   </form>;
 }

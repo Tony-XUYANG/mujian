@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { api, type User } from "./api";
 import { Modal } from "./Modal";
-import { VariantSelector, type Variant } from "./Variants";
+import { AttributeSelector, VariantSelector, type AttributeGroup, type Variant } from "./Variants";
 import {
   ProductShopping,
   ShoppingEntry,
@@ -26,6 +26,7 @@ import {
 export type Product = {
   hasVariants?: boolean | number;
   variants?: Variant[];
+  attributeGroups?: AttributeGroup[];
   skuId?: number;
   variantName?: string;
   id: number;
@@ -509,7 +510,9 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
                 {p.origin && <span>产地·{p.origin}</span>}
               </div>
               <p className="muted">{selected ? "当前规格库存" : "可售库存"} {purchaseProduct!.stock} 件</p>
-              {Boolean(p.hasVariants) && <VariantSelector variants={p.variants || []} selected={skuId} onSelect={setSkuId} />}
+              {Boolean(p.attributeGroups?.length) && <AttributeSelector groups={p.attributeGroups || []} variants={p.variants || []} selected={skuId} onSelect={setSkuId} />}
+              {Boolean(p.hasVariants) && !p.attributeGroups?.length && <VariantSelector variants={p.variants || []} selected={skuId} onSelect={setSkuId} />}
+              {Boolean(p.attributeGroups?.length && p.variants?.some(v => !v.valueIds?.length)) && <VariantSelector variants={(p.variants || []).filter(v => !v.valueIds?.length)} selected={skuId} onSelect={setSkuId} />}
               <button
                 className="store-link"
                 onClick={() => props.onNavigate("store/" + p.shopId)}

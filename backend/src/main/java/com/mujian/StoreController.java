@@ -22,6 +22,7 @@ public class StoreController {
     private final DramaRepository dramas;
     private final ProductDetails details;
     private final ProductVariants variants;
+    private final ProductAttributeMatrix attributes;
     static final String PRODUCT = """
         SELECT p.id,p.name,p.image_url AS imageUrl,p.description,p.price,p.stock,p.status,p.version,
           s.id AS shopId,s.name AS shopName,s.logo_url AS shopLogoUrl,
@@ -35,7 +36,7 @@ public class StoreController {
         LEFT JOIN shop_product_detail pd ON pd.product_id=p.id
         """;
     private static final String SHOP = "SELECT id,name,logo_url AS logoUrl,description,status FROM shop ";
-    public StoreController(JdbcTemplate db, DramaRepository dramas,ProductDetails details,ProductVariants variants) { this.db=db; this.dramas=dramas; this.details=details; this.variants=variants; }
+    public StoreController(JdbcTemplate db, DramaRepository dramas,ProductDetails details,ProductVariants variants,ProductAttributeMatrix attributes) { this.db=db; this.dramas=dramas; this.details=details; this.variants=variants; this.attributes=attributes; }
 
     public record ShopInput(
         @NotBlank(message="请输入店铺名称") @Size(max=80,message="店铺名称最多80字") String name,
@@ -195,7 +196,10 @@ public class StoreController {
     private Map<String,Object> productRow(long id,boolean all) {
         var rows=db.queryForList(PRODUCT+" WHERE p.id=? AND (? OR (p.status='ON_SALE' AND s.status='ACTIVE'))",id,all);
         if(rows.isEmpty())throw missing("商品不存在或已下架");
-        var row=rows.getFirst(); row.put("variants",variants.list(id,false)); return row;
+        var row=rows.getFirst();
+        row.put("variants",attributes.publicVariants(id));
+        row.put("attributeGroups",attributes.publicGroups(id));
+        return row;
     }
     private long insert(String sql,Object... args) {
         var key=new GeneratedKeyHolder();db.update(c->{var ps=c.prepareStatement(sql,Statement.RETURN_GENERATED_KEYS);for(int i=0;i<args.length;i++)ps.setObject(i+1,args[i]);return ps;},key);

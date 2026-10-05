@@ -83,6 +83,8 @@ public class ProductVariants {
             sync(productId);
         }
     }
+    /** Recomputes the legacy product summary after an attribute matrix changes. */
+    public void syncProduct(long productId) { sync(productId); }
     private void sync(long id) {
         var rows = list(id,true);
         var active = rows.stream().filter(v -> Boolean.TRUE.equals(v.get("onSale"))).toList();

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { api, type DramaInput } from "./api";
 import { Modal } from "./Modal";
-import { VariantManager } from "./Variants";
+import { AttributeMatrixManager, VariantManager } from "./Variants";
 import { productCategories } from "./Shopping";
 import {
   CommerceLogin,
@@ -30,6 +30,7 @@ export function Merchant(props: CommerceProps & { initialTab?: string }) {
     [tab, setTab] = useState(props.initialTab || "products"),
     [editing, setEditing] = useState<Product | null | undefined>(),
     [variantProduct, setVariantProduct] = useState<Product | null>(null),
+    [attributeProduct, setAttributeProduct] = useState<Product | null>(null),
     [shopEdit, setShopEdit] = useState(false),
     [publish, setPublish] = useState(false),
     [links, setLinks] = useState<Video | null>(null),
@@ -197,6 +198,7 @@ export function Merchant(props: CommerceProps & { initialTab?: string }) {
                           </span>
                         </div>
                         <div className="merchant-product-actions">
+                          <button className="secondary" onClick={() => setAttributeProduct(p)}>属性组合</button>
                           <button className="secondary" onClick={() => setVariantProduct(p)}>规格库存</button>
                           <button
                             className="secondary"
@@ -299,6 +301,7 @@ export function Merchant(props: CommerceProps & { initialTab?: string }) {
               </Modal>
             )}
             {variantProduct && <VariantManager product={variantProduct} onClose={() => setVariantProduct(null)} onSaved={() => { setVariantProduct(null); refresh(); props.toast("规格和库存已保存"); }} />}
+            {attributeProduct && <AttributeMatrixManager product={attributeProduct} onClose={() => setAttributeProduct(null)} onSaved={() => { setAttributeProduct(null); refresh(); props.toast("属性组合已保存"); }} />}
             {shopEdit && (
               <Modal
                 label="店铺资料"

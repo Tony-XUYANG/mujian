@@ -14,6 +14,26 @@
 .variant-picker button.selected { border-color: var(--accent); background: #e69d7818; }
 .variant-picker button:disabled { opacity: .45; cursor: not-allowed; }
 .selected-variant { color: #d9a47e; overflow-wrap: anywhere; }
+.attribute-picker > .attribute-group { margin: 12px 0; }
+.attribute-group > strong { display: block; color: #b8aaa0; font-size: 12px; font-weight: 500; margin-bottom: 7px; }
+.attribute-group > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.attribute-group button { display: inline-flex; flex-direction: row; min-height: 0; padding: 8px 13px; font-size: 12px; }
+.attribute-group button.selected { color: #f1c1a1; }
+.attribute-editor-groups { display: grid; gap: 11px; }
+.attribute-editor-group { border: 1px solid #ffffff1c; border-radius: 10px; padding: 12px; }
+.attribute-values { display: grid; gap: 7px; margin: 8px 0; }
+.attribute-value-row { display: flex; align-items: center; gap: 6px; }
+.attribute-value-row input { min-width: 0; flex: 1; }
+.compact-button { padding: 7px 10px; font-size: 11px; }
+.attribute-form-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.attribute-combination-table { border: 1px solid #ffffff1c; border-radius: 10px; overflow: auto; margin: 14px 0; }
+.attribute-combination-head,
+.attribute-combination-row { display: grid; grid-template-columns: minmax(150px, 1.5fr) minmax(90px, .7fr) minmax(80px, .6fr) 72px; gap: 8px; align-items: center; padding: 9px 11px; min-width: 500px; }
+.attribute-combination-head { color: #a99e96; font-size: 10px; background: #ffffff08; }
+.attribute-combination-row { border-top: 1px solid #ffffff0d; font-size: 12px; }
+.attribute-combination-row input { min-width: 0; width: 100%; box-sizing: border-box; }
+.attribute-combination-row .commerce-check { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 11px; }
+.attribute-combination-row .commerce-check input { width: auto; }
 .variant-editor-row { border: 1px solid #ffffff1c; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
 .variant-row-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .variant-form .commerce-field-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -24,6 +44,8 @@
   .variant-picker > div { grid-template-columns: 1fr; }
   .merchant-product-actions { flex-wrap: wrap; }
   .variant-form .commerce-field-row { grid-template-columns: 1fr; }
+  .attribute-combination-head,
+  .attribute-combination-row { grid-template-columns: minmax(120px, 1.3fr) 80px 70px 58px; padding: 8px; }
 }
 .shopping-cart-entry {
   position: relative;

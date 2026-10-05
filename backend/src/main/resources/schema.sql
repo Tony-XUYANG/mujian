@@ -392,3 +392,34 @@ CREATE TABLE IF NOT EXISTS order_variant (
   FOREIGN KEY (order_no) REFERENCES shop_order(order_no) ON DELETE CASCADE,
   FOREIGN KEY (variant_id) REFERENCES product_variant(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Optional attribute matrix. It augments product_variant without replacing the
+-- legacy free-form specification rows used by older products and orders.
+CREATE TABLE IF NOT EXISTS product_attribute (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  product_id BIGINT NOT NULL,
+  name VARCHAR(40) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  FOREIGN KEY (product_id) REFERENCES shop_product(id) ON DELETE CASCADE,
+  CONSTRAINT uk_product_attribute_name UNIQUE (product_id,name),
+  INDEX idx_product_attribute_product (product_id,sort_order,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS product_attribute_value (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  attribute_id BIGINT NOT NULL,
+  value VARCHAR(60) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  FOREIGN KEY (attribute_id) REFERENCES product_attribute(id) ON DELETE CASCADE,
+  CONSTRAINT uk_product_attribute_value UNIQUE (attribute_id,value),
+  INDEX idx_product_attribute_value_attribute (attribute_id,sort_order,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS product_variant_value (
+  variant_id BIGINT NOT NULL,
+  value_id BIGINT NOT NULL,
+  PRIMARY KEY (variant_id,value_id),
+  FOREIGN KEY (variant_id) REFERENCES product_variant(id) ON DELETE CASCADE,
+  FOREIGN KEY (value_id) REFERENCES product_attribute_value(id) ON DELETE RESTRICT,
+  INDEX idx_product_variant_value_value (value_id,variant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
