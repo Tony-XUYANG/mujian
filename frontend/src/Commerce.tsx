@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { api, type User } from "./api";
 import { Modal } from "./Modal";
+import { createRequestKey } from "./requestKey";
 import { AttributeSelector, VariantSelector, type AttributeGroup, type Variant } from "./Variants";
 import {
   ProductShopping,
@@ -570,11 +571,11 @@ function Checkout({
     [recipient, setRecipient] = useState(""),
     [phone, setPhone] = useState(""),
     [address, setAddress] = useState(""),
-    [key, setKey] = useState(() => crypto.randomUUID());
+    [key, setKey] = useState(createRequestKey);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const change = () => {
-    setKey(crypto.randomUUID());
+    setKey(createRequestKey());
     setError("");
   };
   async function submit(e: FormEvent) {

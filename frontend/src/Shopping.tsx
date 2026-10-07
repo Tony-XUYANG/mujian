@@ -16,6 +16,7 @@ import {
 import { api } from "./api";
 import { createPortal } from "react-dom";
 import { Modal } from "./Modal";
+import { createRequestKey } from "./requestKey";
 import {
   CommerceLogin,
   LoadState,
@@ -691,7 +692,7 @@ function CartCheckout({
   onRefresh: () => void;
 }) {
   const [address, setAddress] = useState<Address | null>(null),
-    [key, setKey] = useState(() => crypto.randomUUID()),
+    [key, setKey] = useState(createRequestKey),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const total =
@@ -751,7 +752,7 @@ function CartCheckout({
             required
             onSelect={(a) => {
               setAddress(a);
-              setKey(crypto.randomUUID());
+              setKey(createRequestKey());
             }}
           />
           {address && (
