@@ -52,10 +52,18 @@ try {
   await modal.getByLabel("组合库存2", { exact: true }).fill("2");
   await modal.getByLabel("组合库存3", { exact: true }).fill("4");
   await modal.getByLabel("组合库存4", { exact: true }).fill("1");
+  await modal.getByLabel("组合售价2", { exact: true }).fill("32.9");
+  await modal.getByLabel("组合售价3", { exact: true }).fill("31.9");
+  await modal.getByRole("button", { name: "生成组合", exact: true }).click();
+  check("重复生成保留交叉组合各自的价格和库存",
+    await modal.getByLabel("组合售价2", { exact: true }).inputValue() === "32.9" &&
+    await modal.getByLabel("组合售价3", { exact: true }).inputValue() === "31.9" &&
+    await modal.getByLabel("组合库存2", { exact: true }).inputValue() === "2" &&
+    await modal.getByLabel("组合库存3", { exact: true }).inputValue() === "4");
+  await page.screenshot({ path: output + "desktop-merchant-attribute-matrix.jpg", type: "jpeg", quality: 86, fullPage: true });
   await modal.getByRole("button", { name: "保存属性组合", exact: true }).click();
   await modal.waitFor({ state: "hidden" });
   check("商家保存属性组合后弹窗关闭", true);
-  await page.screenshot({ path: output + "desktop-merchant-attribute-matrix.jpg", type: "jpeg", quality: 86, fullPage: true });
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await page.goto(base + "/#product/" + product.id);
   const picker = page.getByRole("region", { name: "商品属性" });
@@ -80,6 +88,52 @@ try {
     check(width + "px属性选择无横向溢出", await fits());
     await page.screenshot({ path: output + "mobile-" + width + "-attribute-picker.jpg", type: "jpeg", quality: 86, fullPage: true });
   }
+  // Keep only white/350 and blue/500 purchasable to exercise switching
+  // between combinations that share no attributes. Black is always sold out.
+  const matrix = await api("/shop/products/" + product.id + "/attributes", "GET", undefined, seller.token);
+  await api("/shop/products/" + product.id + "/attributes", "PUT", {
+    version: matrix.version,
+    groups: matrix.groups.map((g, i) => i === 0 ? { ...g, values: [...g.values, { value: "曜石黑" }] } : g),
+    variants: [...matrix.variants.map((v, i) => ({ ...v, stock: i === 2 ? 0 : v.stock, onSale: i !== 1 })),
+      { valueIds: [-3, matrix.groups[1].values[0].id], price: 39.9, stock: 0, onSale: true }],
+  }, seller.token);
+  await page.reload();
+  await picker.getByRole("button", { name: "奶油白", exact: true }).click();
+  await picker.getByRole("button", { name: "350毫升", exact: true }).click();
+  check("稀疏组合下其他有货颜色仍可切换", await picker.getByRole("button", { name: "雾蓝", exact: true }).isEnabled());
+  await picker.getByRole("button", { name: "雾蓝", exact: true }).click();
+  check("换色清除冲突容量并要求重新选完整款式",
+    (await page.locator(".selected-variant").innerText()).includes("请选择剩余属性") &&
+    await picker.getByRole("button", { name: "350毫升", exact: true }).getAttribute("aria-pressed") === "false" &&
+    await page.getByRole("button", { name: "加入购物车", exact: true }).isDisabled());
+  await picker.getByRole("button", { name: "500毫升", exact: true }).click();
+  check("可完成另一稀疏组合选款", (await page.locator(".selected-variant").innerText()).includes("雾蓝 / 500毫升"));
+  await picker.getByRole("button", { name: "350毫升", exact: true }).click();
+  check("换容量同样清除冲突颜色", await picker.getByRole("button", { name: "雾蓝", exact: true }).getAttribute("aria-pressed") === "false");
+  await picker.getByRole("button", { name: "奶油白", exact: true }).click();
+  check("可切回原款且完全售罄属性不可选", (await page.locator(".selected-variant").innerText()).includes("奶油白 / 350毫升") && await picker.getByRole("button", { name: "曜石黑", exact: true }).isDisabled());
+  await page.screenshot({ path: output + "mobile-320-sparse-switching.jpg", type: "jpeg", quality: 86, fullPage: true });
+  const beforeExtension = await api("/shop/products/" + product.id + "/attributes", "GET", undefined, seller.token);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await page.goto(base + "/#merchant");
+  await page.getByRole("button", { name: "登录 / 注册", exact: true }).last().click();
+  await page.getByLabel("用户名", { exact: true }).fill(seller.username);
+  await page.getByLabel("密码", { exact: true }).fill("Matrix123!");
+  await page.getByRole("button", { name: "登录幕间", exact: true }).click();
+  await page.getByRole("button", { name: "属性组合", exact: true }).click();
+  await modal.getByRole("button", { name: "添加属性组", exact: true }).click();
+  await modal.getByLabel("属性组名称3", { exact: true }).fill("包装");
+  await modal.getByLabel("包装属性值1", { exact: true }).fill("标准包装");
+  await modal.getByRole("button", { name: "生成组合", exact: true }).click();
+  await modal.getByRole("button", { name: "生成组合", exact: true }).click();
+  check("新增属性组可重新生成完整组合", await modal.locator(".attribute-combination-row").count() === 6);
+  await modal.getByRole("button", { name: "保存属性组合", exact: true }).click();
+  await modal.waitFor({ state: "hidden" });
+  const afterExtension = await api("/shop/products/" + product.id + "/attributes", "GET", undefined, seller.token);
+  check("新增属性组保留原规格编号价格库存及停售状态", afterExtension.groups.length === 3 &&
+    beforeExtension.variants.every(old => afterExtension.variants.some(v => v.id === old.id && v.valueIds.length === 3 && v.stock === old.stock && v.price === old.price && Boolean(v.onSale) === Boolean(old.onSale))) &&
+    afterExtension.variants.reduce((sum, v) => sum + v.stock, 0) === beforeExtension.variants.reduce((sum, v) => sum + v.stock, 0));
   check("浏览器无脚本异常", errors.length === 0);
   const orders = await api("/me/orders", "GET", undefined, buyer.token);
   for (const order of orders) if (order.status === "PENDING") await api("/me/orders/" + order.orderNo + "/cancel", "POST", undefined, buyer.token);

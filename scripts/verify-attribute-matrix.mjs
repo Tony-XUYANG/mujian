@@ -46,6 +46,20 @@ try {
     { valueIds: [-2, -1], price: 31.9, stock: 4, onSale: true },
     { valueIds: [-2, -2], price: 35.9, stock: 1, onSale: true },
   ];
+  const legacyOrder = await req("/products/" + product.id + "/buy", "POST", {
+    quantity: 1, recipient: "虚拟体验人", phone: "13800000000", address: "演示路100号",
+    requestKey: randomUUID(), expectedPrice: 29.9,
+  }, buyer);
+  assert.equal(legacyOrder.status, 201);
+  matrix = await req("/shop/products/" + product.id + "/attributes", "GET", undefined, seller);
+  const blocked = await req("/shop/products/" + product.id + "/attributes", "PUT", { version: matrix.data.version, groups, variants }, seller);
+  check("未付款旧订单阻止首次启用属性矩阵并返回中文原因", blocked.status === 409 && JSON.stringify(blocked.data).includes("未付款的旧款订单"));
+  const afterBlocked = await req("/shop/products/" + product.id + "/attributes", "GET", undefined, seller);
+  check("启用失败不会留下属性或组合半成品", afterBlocked.data.groups.length === 0 && afterBlocked.data.variants.length === 0 && afterBlocked.data.version === matrix.data.version);
+  assert.equal((await req("/me/orders/" + legacyOrder.data.orderNo + "/cancel", "POST", undefined, buyer)).status, 200);
+  const afterCancel = await req("/mall/products/" + product.id);
+  check("旧订单取消后库存完整返还", afterCancel.data.stock === 10);
+  matrix = await req("/shop/products/" + product.id + "/attributes", "GET", undefined, seller);
   const saved = await req("/shop/products/" + product.id + "/attributes", "PUT", { version: matrix.data.version, groups, variants }, seller);
   check("新属性值可以一次生成四种组合", saved.status === 200 && saved.data.groups.length === 2 && saved.data.variants.length === 4);
   check("组合自动生成可读名称", saved.data.variants.some(v => v.name === "米白 / 350毫升") && saved.data.variants.some(v => v.name === "雾蓝 / 500毫升"));
@@ -73,6 +87,13 @@ try {
     stock: variant.stock,
     onSale: Boolean(variant.onSale),
   }));
+  const reversed = await req("/shop/products/" + product.id + "/attributes", "PUT", {
+    version: saved.data.version, groups: savedGroups,
+    variants: savedVariantInputs.map((v, i) => i === 0 ? { ...v, valueIds: [...v.valueIds].reverse() } : v),
+  }, seller);
+  check("属性组顺序错配被中文校验拒绝", reversed.status === 400 && JSON.stringify(reversed.data).includes("按属性组顺序"));
+  const unchanged = await req("/shop/products/" + product.id + "/attributes", "GET", undefined, seller);
+  check("错误组合不会修改已有名称库存或版本", JSON.stringify(unchanged.data) === JSON.stringify(saved.data));
   const duplicate = await req("/shop/products/" + product.id + "/attributes", "PUT", {
     version: saved.data.version,
     groups: savedGroups,
@@ -89,6 +110,8 @@ try {
   check("单个属性值超过上限被拒绝", invalid.status === 400);
   const other = await user("其他");
   check("其他店主不能修改属性矩阵", (await req("/shop/products/" + product.id + "/attributes", "PUT", { version: saved.data.version, groups: savedGroups, variants: savedVariantInputs }, other)).status === 404);
+  const resaved = await req("/shop/products/" + product.id + "/attributes", "PUT", { version: saved.data.version, groups: savedGroups, variants: savedVariantInputs }, seller);
+  check("真实属性编号可再次保存且组合编号不变", resaved.status === 200 && resaved.data.variants.every((v, i) => v.id === saved.data.variants[i].id && v.name === saved.data.variants[i].name));
   const orders = await req("/me/orders", "GET", undefined, buyer);
   for (const order of orders.data) {
     pending.push(order.orderNo);

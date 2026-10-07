@@ -32,7 +32,19 @@ export function AttributeSelector({ groups, variants, selected, onSelect }: { gr
     setChosen(next);
   }, [selected, variants, groups]);
   function pick(index: number, valueId: number) {
-    const next = { ...chosen, [String(groups[index].id ?? index)]: valueId };
+    // A sparse matrix may contain 白/350 and 蓝/500 but no cross-pairs.
+    // Keep the changed attribute, then retain only previous choices that can
+    // still lead to an in-stock SKU. This avoids trapping the buyer on 白/350.
+    let candidates = matrix.filter(v => v.onSale && v.stock > 0 && v.valueIds?.[index] === valueId);
+    if (!candidates.length) return;
+    const next: Record<string, number> = { [String(groups[index].id ?? index)]: valueId };
+    groups.forEach((g, i) => {
+      if (i === index) return;
+      const key = String(g.id ?? i), previous = chosen[key];
+      if (previous === undefined) return;
+      const compatible = candidates.filter(v => v.valueIds?.[i] === previous);
+      if (compatible.length) { next[key] = previous; candidates = compatible; }
+    });
     setChosen(next);
     const complete = groups.every((g, i) => next[String(g.id ?? i)] !== undefined);
     if (!complete) { onSelect(null); return; }
@@ -45,11 +57,12 @@ export function AttributeSelector({ groups, variants, selected, onSelect }: { gr
       <strong>{group.name}</strong>
       <div>{group.values.map(value => {
         const key = String(group.id ?? gi);
-        const active = matrix.some(v => v.onSale && v.stock > 0 && v.valueIds?.[gi] === value.id && groups.every((g, i) => !chosen[String(g.id ?? i)] || v.valueIds?.[i] === chosen[String(g.id ?? i)]));
+        const active = matrix.some(v => v.onSale && v.stock > 0 && v.valueIds?.[gi] === value.id);
         return <button type="button" key={value.id || value.value} aria-pressed={chosen[key] === value.id} disabled={!active} className={chosen[key] === value.id ? "selected" : ""} onClick={() => value.id && pick(gi, value.id)}>{value.value}</button>;
       })}</div>
     </div>)}
     {selected && <p className="selected-variant">已选组合：{variants.find(v => v.id === selected)?.name}</p>}
+    {!selected && Object.keys(chosen).length > 0 && <p className="selected-variant">请选择剩余属性，确定可购买的款式</p>}
   </section>;
 }
 export function VariantManager({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
@@ -129,14 +142,27 @@ function AttributeMatrixForm({ product, data, onSaved, onBusy }: { product: Prod
   function generate() {
     setError("");
     if (!groups.length || groups.some(g => !g.name.trim() || !g.values.length || g.values.some(v => !v.value.trim()))) { setError("请先填写属性组和属性值"); return; }
-    const combinations = groups.reduce<number[][]>((all, g, gi) => all.flatMap(prefix => g.values.map((v, vi) => [...prefix, v.id || -(vi + 1)])), [[]]);
+    const combinations = groups.reduce<number[][]>((all, g) => all.flatMap(prefix => g.values.map((v, vi) => [...prefix, v.id || -(vi + 1)])), [[]]);
     if (combinations.length > maxCombinations) { setError("属性组合超过20种，请减少属性值"); return; }
-    const old = new Map(rows.map(r => [r.valueIds.slice().sort((a,b) => a-b).join(","), r]));
-    const legacy = new Map(data.variants.filter(v => v.valueIds?.length).map(v => [v.valueIds!.slice().sort((a,b) => a-b).join(","), v]));
+    // Temporary negative IDs are positions within each group. Sorting them
+    // merges distinct pairs such as [-1,-2] and [-2,-1]. Keep group order.
+    const old = new Map(rows.map(r => [r.valueIds.join(","), r]));
+    const legacy = new Map(data.variants.filter(v => v.valueIds?.length).map(v => [v.valueIds!.join(","), v]));
+    const reusedIds = new Set<number>();
     setRows(combinations.map(valueIds => {
-      const key = valueIds.slice().sort((a,b) => a-b).join(",");
+      const key = valueIds.join(",");
       const previous = old.get(key), saved = legacy.get(key);
-      return previous || (saved ? { id: saved.id, valueIds, price: saved.price, stock: saved.stock, onSale: Boolean(saved.onSale) } : { valueIds, price: product.price, stock: 0, onSale: true });
+      if (previous) { if (previous.id) reusedIds.add(previous.id); return { ...previous, valueIds }; }
+      if (saved) { reusedIds.add(saved.id); return { id: saved.id, valueIds, price: saved.price, stock: saved.stock, onSale: Boolean(saved.onSale) }; }
+      // When adding a new attribute group, assign each old SKU to the first
+      // compatible new combination. Preserve its stock, price and order ID.
+      const carry = data.variants.find(v => v.valueIds?.length && !reusedIds.has(v.id) && v.valueIds.every(id => valueIds.includes(id)));
+      if (carry) {
+        reusedIds.add(carry.id);
+        const edited = rows.find(r => r.id === carry.id);
+        return { id: carry.id, valueIds, price: edited?.price ?? carry.price, stock: edited?.stock ?? carry.stock, onSale: edited?.onSale ?? Boolean(carry.onSale) };
+      }
+      return { valueIds, price: product.price, stock: 0, onSale: true };
     }));
   }
   async function save(e: FormEvent) {

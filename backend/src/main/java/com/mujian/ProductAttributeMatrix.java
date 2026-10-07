@@ -128,6 +128,9 @@ public class ProductAttributeMatrix {
         var valueToGroup = new HashMap<Long, Long>();
         for (int i = 0; i < groupIds.size(); i++) for (long valueId : groupValueIds.get(i)) valueToGroup.put(valueId, groupIds.get(i));
         var oldVariants = variants.list(id, true);
+        if (oldVariants.isEmpty() && db.queryForObject(
+            "SELECT COUNT(*) FROM shop_order WHERE product_id=? AND status='PENDING'", Integer.class, id) > 0)
+            throw conflict("存在未付款的旧款订单，请处理或等待过期后再启用规格");
         var oldVariantIds = ids(oldVariants, "id");
         var mappedOldIds = new HashSet<Long>(db.queryForList("""
             SELECT DISTINCT vv.variant_id FROM product_variant_value vv
@@ -156,7 +159,8 @@ public class ProductAttributeMatrix {
                 long valueId = rawValueId > 0 ? rawValueId : temporaryValue(groupValueIds, gi, rawValueId);
                 resolved.add(valueId);
                 Long groupId = valueToGroup.get(valueId);
-                if (groupId == null || !seenGroups.add(groupId)) throw bad("组合包含无效或重复属性值");
+                if (!Objects.equals(groupId, groupIds.get(gi)) || !seenGroups.add(groupId))
+                    throw bad("组合属性值必须按属性组顺序选择，且不能重复");
                 names.add((String) db.queryForObject("SELECT value FROM product_attribute_value WHERE id=?", String.class, valueId));
             }
             if (resolved.size() != new HashSet<>(resolved).size()) throw bad("每个组合必须为每个属性组选择一个不同的属性值");
