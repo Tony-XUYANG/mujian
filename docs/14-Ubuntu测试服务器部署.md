@@ -4,6 +4,10 @@
 
 ## 本次部署结果（2026-10-07）
 
+最新规格配图版本已部署：源码 `3660085`，发布包 `mujian-variant-images.tar.gz`，SHA256 `dbc6af2dec13198e1b51c63019ece5223bad8b15d1ba6507ca980be7faf6274c`。包内校验通过后执行 `sudo bash update-ubuntu.sh .`，仅重启应用并保留上一JAR；健康状态为 `UP/connected`。入口资源为 `index-D5-zdmxs.js` / `index-BcWZk94p.css`，新增 `product_variant_image` 表，旧业务表未改动。云端配图API28项及只读部署21项通过，手机320/390px选款效果已人工核对。[功能与截图](15-规格配图与订单图片快照.md)。
+
+升级前备份位于服务器 `/var/backups/mujian/before-variant-images-20261007-204449`，目录权限700、文件仅root可读。包含事务一致性数据库导出、上传目录归档、上一应用路径和SHA256清单；gzip/tar可读性检查通过。备份仍与应用同机，未执行恢复演练、异地复制或定时备份，不把归档成功当作完整灾备验收。
+
 测试地址：[首页](http://106.54.37.247/#home)、[商城](http://106.54.37.247/#mall)。腾讯云上海实例 `mujian-test`，实际购买为锐驰型2核4GB、50GB SSD，控制台标示200Mbps峰值、不限流量；峰值不是持续独享带宽保证。系统为Ubuntu Server 24.04.4 LTS。
 
 首次部署包SHA256为 `639a8b1b1e4cc99516114019a0c9be1bdfc9d769d416357246cb1dde2191d61a`，首次应用源码版本为 `98b7d460529244e21d2a40369b6e599efb20fdca`。Java/MySQL/Nginx均已启动，数据库健康检查通过，公开首页、8部演示短剧、5件商品及视频Range可用。本轮没有调整云防火墙、开放数据库或改变SSH登录凭据。
@@ -70,7 +74,7 @@ tar -xzf mujian-release.tar.gz -C mujian-update
 sudo bash mujian-update/mujian-release/update-ubuntu.sh mujian-update/mujian-release
 ```
 
-后续发布包会包含升级脚本并计入 SHA256 校验；本次修复包生成较早，因此单独上传仓库中的 `deploy/update-ubuntu.sh`，实际执行 `sudo bash update-ubuntu.sh mujian-http-fix/mujian-release`。
+规格配图发布包已包含升级脚本并计入 SHA256 校验。此前 HTTP 修复包生成较早，当时单独上传 `deploy/update-ubuntu.sh` 并执行 `sudo bash update-ubuntu.sh mujian-http-fix/mujian-release`；该路径是历史发布记录。
 
 脚本原子替换当前 JAR 链接并仅重启应用，成功后保留 `/opt/mujian/previous.jar`；启动失败或健康检查超时则自动切回旧 JAR。它不修改数据库、环境密码、上传文件、Nginx 或 SSH。本次实际验证成功分支，未人为注入启动失败。仅回退 JAR 不等于数据库迁移回退，变更 schema 前须先备份。不在共享生产环境运行会批量注册用户和创建测试数据的验收脚本。
 

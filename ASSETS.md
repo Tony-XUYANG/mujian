@@ -1,5 +1,7 @@
 # 演示素材来源
 
+商城 `shop-cup.svg` 及本轮衍生的 `shop-cup-blue.svg`、`shop-cup-black.svg` 为项目内 SVG 演示插画，用于区分奶油白、雾蓝、曜石黑款式；不是商品实拍或真实商品承诺。
+
 图片来自 https://images.unsplash.com ，按 Unsplash License 使用。图片仅作为虚构短剧封面，未宣称是演员或实际剧集截图。
 
 | 本地文件 | 图片编号 |
