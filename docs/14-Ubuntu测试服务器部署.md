@@ -4,7 +4,13 @@
 
 ## 本次部署结果（2026-10-07）
 
-最新规格配图版本已部署：源码 `3660085`，发布包 `mujian-variant-images.tar.gz`，SHA256 `dbc6af2dec13198e1b51c63019ece5223bad8b15d1ba6507ca980be7faf6274c`。包内校验通过后执行 `sudo bash update-ubuntu.sh .`，仅重启应用并保留上一JAR；健康状态为 `UP/connected`。入口资源为 `index-D5-zdmxs.js` / `index-BcWZk94p.css`，新增 `product_variant_image` 表，旧业务表未改动。云端配图API28项及只读部署21项通过，手机320/390px选款效果已人工核对。[功能与截图](15-规格配图与订单图片快照.md)。
+最新商品图片上传版本已部署：源码 `975def4`，发布包 `mujian-shop-media.tar.gz`，SHA256 `8e05bc24ef3649265c26c316d322f15902cd4d48dacc0d5824a43d2bb34ca3a4`。SHA256及包内校验通过后使用包内 `update-ubuntu.sh` 成功更新，健康状态 `UP/connected`。新增 `shop_media`，当前37张表，上传到 `/var/lib/mujian/uploads/shop`，目录与JAR发布隔离。
+
+云端上传API29项、只读部署21项通过；最新JS/CSS为 `index-Dch4hN0P.js` / `index-m5D5V1vq.css`。头像仍使用原上传路径，商品文件在shop子目录以不可覆盖地址独立保存。未配置图片内容审核、自动清理或对象存储。
+
+本次复用已有备份脚本，升级前归档目录为 `/var/backups/mujian/before-variant-images-20261007-214334`，名字沿用脚本，不代表备份内容是上一版本；归档为本次升级前的数据库和上传文件。目录700，完整性检查通过，恢复演练/自动备份仍未完成。[上传功能说明](16-商品图片上传与裁剪.md)。
+
+此前规格配图版本发布记录：源码 `3660085`，发布包 `mujian-variant-images.tar.gz`，SHA256 `dbc6af2dec13198e1b51c63019ece5223bad8b15d1ba6507ca980be7faf6274c`。包内校验通过后执行 `sudo bash update-ubuntu.sh .`，仅重启应用并保留上一JAR；健康状态为 `UP/connected`。入口资源为 `index-D5-zdmxs.js` / `index-BcWZk94p.css`，新增 `product_variant_image` 表，旧业务表未改动。云端配图API28项及只读部署21项通过，手机320/390px选款效果已人工核对。[功能与截图](15-规格配图与订单图片快照.md)。
 
 升级前备份位于服务器 `/var/backups/mujian/before-variant-images-20261007-204449`，目录权限700、文件仅root可读。包含事务一致性数据库导出、上传目录归档、上一应用路径和SHA256清单；gzip/tar可读性检查通过。备份仍与应用同机，未执行恢复演练、异地复制或定时备份，不把归档成功当作完整灾备验收。
 
