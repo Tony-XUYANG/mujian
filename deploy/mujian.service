@@ -1,0 +1,27 @@
+[Unit]
+Description=Mujian short drama and shopping test app
+After=network.target mysql.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=mujian
+Group=mujian
+WorkingDirectory=/var/lib/mujian
+EnvironmentFile=/etc/mujian/app.env
+ExecStart=/usr/bin/java -Xms128m -Xmx768m -XX:MaxMetaspaceSize=256m -XX:MaxDirectMemorySize=128m -jar /opt/mujian/current.jar
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+SuccessExitStatus=143
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/mujian
+MemoryMax=1400M
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target
