@@ -6,11 +6,11 @@
 
 测试地址：[首页](http://106.54.37.247/#home)、[商城](http://106.54.37.247/#mall)。腾讯云上海实例 `mujian-test`，实际购买为锐驰型2核4GB、50GB SSD，控制台标示200Mbps峰值、不限流量；峰值不是持续独享带宽保证。系统为Ubuntu Server 24.04.4 LTS。
 
-首次部署包SHA256为 `639a8b1b1e4cc99516114019a0c9be1bdfc9d769d416357246cb1dde2191d61a`，已运行的应用源码版本为 `98b7d460529244e21d2a40369b6e599efb20fdca`。Java/MySQL/Nginx均已启动，数据库健康检查通过，公开首页、8部演示短剧、5件商品及视频Range可用。本轮没有调整云防火墙、开放数据库或改变SSH登录凭据。
+首次部署包SHA256为 `639a8b1b1e4cc99516114019a0c9be1bdfc9d769d416357246cb1dde2191d61a`，首次应用源码版本为 `98b7d460529244e21d2a40369b6e599efb20fdca`。Java/MySQL/Nginx均已启动，数据库健康检查通过，公开首页、8部演示短剧、5件商品及视频Range可用。本轮没有调整云防火墙、开放数据库或改变SSH登录凭据。
 
-后续发现HTTP结算白屏，修复源码 `78226b7` 已在Linux构建，新发布包SHA256为 `aefe052fee745f8cdaa89408575831940119e4badbbb73d2da7c3aff9834e505`，保存在 `.runtime/deploy/mujian-release.tar.gz`。**该新包尚未部署：腾讯云登录会话已过期，需要用户在OrcaTerm扫码重新登录后上传。** 云端交易API28项及本机Linux修复前端配合云端API的两种结算流程均已通过；服务器旧前端仍需替换。
+后续发现HTTP结算白屏，修复源码 `78226b7` 已在Linux构建，新发布包SHA256为 `aefe052fee745f8cdaa89408575831940119e4badbbb73d2da7c3aff9834e505`，已上传并部署。服务器切换新 JAR 后健康检查返回 `UP/connected`，部署后只读检查21项通过，公网入口加载 `index-hGjwAGfM.js`。云端交易API此前28项通过；部署后浏览器中文登录、立即购买49元、购物车结算59元和取消返库均已复验。两笔测试单已取消，规格库存恢复12/8/0，虚拟地址及购物车为空。
 
-Linux只读部署检查21项通过，真实浏览器确认远端规格换款与价格/库存同步。未执行批量注册、写订单、压测或主机重启；不要把此前本机业务检查计为云端检查。实例当前无域名/HTTPS，PWA安全上下文、桌面安装和离线须在可信HTTPS完成后再验。
+云端交易测试使用独立测试账号、虚拟地址及演示订单；历史测试记录保留，不代表真实成交。未执行并发压测或主机重启；不要把此前本机业务检查计为云端检查。实例当前无域名/HTTPS，PWA安全上下文、桌面安装和离线须在可信HTTPS完成后再验。
 
 ![公网首页](screenshots/deployment/remote-home.jpg)
 
@@ -62,7 +62,17 @@ APP_URL=http://106.54.37.247 node scripts/verify-deployment.mjs
 
 本次套餐为200Mbps峰值，实际速度取决于线路和共享资源；不能据此承诺并发播放人数。多人播放视频时再按实测接入对象存储/CDN，本轮不购买、配置或上传商业视频。
 
-升级前备份数据库和 `/var/lib/mujian/uploads`。上传新包后重复安装流程会保留环境密码、数据库和上传文件，并记录上一个 JAR 的符号链接。仅回退 JAR 不等于数据库迁移回退，变更 schema 前须先备份。不在共享生产环境运行会批量注册用户和创建测试数据的本地验收脚本。
+升级前备份数据库和 `/var/lib/mujian/uploads`。兼容现有数据库结构的版本可使用 `deploy/update-ubuntu.sh`，无需重复安装依赖或重启 MySQL：
+
+```bash
+mkdir -p mujian-update
+tar -xzf mujian-release.tar.gz -C mujian-update
+sudo bash mujian-update/mujian-release/update-ubuntu.sh mujian-update/mujian-release
+```
+
+后续发布包会包含升级脚本并计入 SHA256 校验；本次修复包生成较早，因此单独上传仓库中的 `deploy/update-ubuntu.sh`，实际执行 `sudo bash update-ubuntu.sh mujian-http-fix/mujian-release`。
+
+脚本原子替换当前 JAR 链接并仅重启应用，成功后保留 `/opt/mujian/previous.jar`；启动失败或健康检查超时则自动切回旧 JAR。它不修改数据库、环境密码、上传文件、Nginx 或 SSH。本次实际验证成功分支，未人为注入启动失败。仅回退 JAR 不等于数据库迁移回退，变更 schema 前须先备份。不在共享生产环境运行会批量注册用户和创建测试数据的验收脚本。
 
 当前版本不改数据库结构时，可由管理员在服务器上回退上一个JAR：
 
