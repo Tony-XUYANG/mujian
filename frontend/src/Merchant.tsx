@@ -12,6 +12,7 @@ import { api, type DramaInput } from "./api";
 import { Modal } from "./Modal";
 import { AttributeMatrixManager, VariantManager } from "./Variants";
 import { productCategories } from "./Shopping";
+import { CommerceImageField } from "./CommerceImageField";
 import {
   CommerceLogin,
   LoadState,
@@ -542,15 +543,7 @@ function ProductForm({
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
         </label>
-        <label>
-          商品图片链接（选填）
-          <input
-            maxLength={1000}
-            placeholder="https://… 或 /media/…"
-            value={form.imageUrl}
-            onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-          />
-        </label>
+        <CommerceImageField label="商品图片链接（选填）" value={form.imageUrl} onChange={imageUrl => setForm(old => ({ ...old, imageUrl }))} disabled={busy} />
         <label>
           商品介绍
           <textarea
@@ -694,6 +687,13 @@ function ProductForm({
             }
           />
         </label>
+        <div className="commerce-gallery-editor" aria-label="商品相册图片">
+          {form.details.images.map((imageUrl, i) => <div key={i}>
+            <CommerceImageField label={'相册图片' + (i + 1)} value={imageUrl} disabled={busy} onChange={url => setForm(old => ({ ...old, details: { ...old.details, images: old.details.images.map((s,n) => n === i ? url : s) } }))} />
+            <button type="button" className="secondary compact-button" aria-label={'移除相册图片' + (i + 1)} onClick={() => setForm(old => ({ ...old, details: { ...old.details, images: old.details.images.filter((_,n) => n !== i) } }))}>移除这张</button>
+          </div>)}
+          <button type="button" className="secondary" disabled={form.details.images.length >= 6} onClick={() => setForm(old => ({ ...old, details: { ...old.details, images: [...old.details.images, ''] } }))}><Plus size={14} />添加相册图片</button>
+        </div>
       </fieldset>
       <p className="commerce-note">
         库存表示当前可售数量。待付款订单取消后，会自动返还对应数量。

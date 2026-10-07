@@ -217,6 +217,21 @@ CREATE TABLE IF NOT EXISTS shop_product (
   INDEX idx_product_shop_status (shop_id,status,create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Merchant-owned normalized image files. URLs are generated and immutable;
+-- retaining rows lets old order snapshots keep resolving after product edits.
+CREATE TABLE IF NOT EXISTS shop_media (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  shop_id BIGINT NOT NULL,
+  url VARCHAR(160) NOT NULL,
+  byte_size BIGINT NOT NULL,
+  width INT NOT NULL,
+  height INT NOT NULL,
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (shop_id) REFERENCES shop(id) ON DELETE CASCADE,
+  CONSTRAINT uk_shop_media_url UNIQUE (url),
+  INDEX idx_shop_media_shop_time (shop_id,create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS drama_product (
   drama_id BIGINT NOT NULL,
   product_id BIGINT NOT NULL,

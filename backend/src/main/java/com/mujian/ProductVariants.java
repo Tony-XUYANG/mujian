@@ -20,7 +20,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/shop/products")
 public class ProductVariants {
     private final JdbcTemplate db;
-    public ProductVariants(JdbcTemplate db) { this.db = db; }
+    private final ShopMedia media;
+    public ProductVariants(JdbcTemplate db,ShopMedia media) { this.db = db; this.media=media; }
     public record Input(@Positive(message="规格编号不正确") Long id,
         @NotBlank(message="请输入规格名称") @Size(max=80,message="规格名称最多80字") String name,
         @NotNull(message="请输入规格价格") @DecimalMin(value="0.01",message="规格价格需大于0") @Digits(integer=8,fraction=2,message="规格价格最多两位小数") BigDecimal price,
@@ -94,7 +95,7 @@ public class ProductVariants {
     public void saveImage(long variantId, String input) {
         if (input==null) return;
         String image=input.strip();
-        if (!image.isEmpty()) AdminController.validateUrl(image);
+        if (!image.isEmpty()) media.validateForProduct(db.queryForObject("SELECT product_id FROM product_variant WHERE id=?",Long.class,variantId),image);
         db.update("INSERT INTO product_variant_image(variant_id,image_url) VALUES (?,?) ON DUPLICATE KEY UPDATE image_url=VALUES(image_url)",variantId,image.isEmpty()?null:image);
     }
     public void changeStock(long productId, Long skuId, int delta) {

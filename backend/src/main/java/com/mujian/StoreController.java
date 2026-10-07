@@ -23,6 +23,7 @@ public class StoreController {
     private final ProductDetails details;
     private final ProductVariants variants;
     private final ProductAttributeMatrix attributes;
+    private final ShopMedia media;
     static final String PRODUCT = """
         SELECT p.id,p.name,p.image_url AS imageUrl,p.description,p.price,p.stock,p.status,p.version,
           s.id AS shopId,s.name AS shopName,s.logo_url AS shopLogoUrl,
@@ -36,7 +37,7 @@ public class StoreController {
         LEFT JOIN shop_product_detail pd ON pd.product_id=p.id
         """;
     private static final String SHOP = "SELECT id,name,logo_url AS logoUrl,description,status FROM shop ";
-    public StoreController(JdbcTemplate db, DramaRepository dramas,ProductDetails details,ProductVariants variants,ProductAttributeMatrix attributes) { this.db=db; this.dramas=dramas; this.details=details; this.variants=variants; this.attributes=attributes; }
+    public StoreController(JdbcTemplate db, DramaRepository dramas,ProductDetails details,ProductVariants variants,ProductAttributeMatrix attributes,ShopMedia media) { this.db=db; this.dramas=dramas; this.details=details; this.variants=variants; this.attributes=attributes; this.media=media; }
 
     public record ShopInput(
         @NotBlank(message="请输入店铺名称") @Size(max=80,message="店铺名称最多80字") String name,
@@ -109,14 +110,14 @@ public class StoreController {
     public List<Map<String,Object>> myProducts(@AuthenticationPrincipal Jwt jwt) { return productsForShop(ownerShopId(jwt),true); }
     @PostMapping("/shop/products") @ResponseStatus(HttpStatus.CREATED) @Transactional
     public Map<String,Object> addProduct(@Valid @RequestBody ProductInput in,@AuthenticationPrincipal Jwt jwt) {
-        long shopId=ownerShopId(jwt);optionalUrl(in.imageUrl());
+        long shopId=ownerShopId(jwt);media.validate(shopId,in.imageUrl());
         long id=insert("INSERT INTO shop_product(shop_id,name,image_url,description,price,stock) VALUES (?,?,?,?,?,?)",shopId,in.name().trim(),clean(in.imageUrl()),clean(in.description()),in.price(),in.stock());
         details.save(id,in.details());
         return productRow(id,true);
     }
     @PatchMapping("/shop/products/{id}") @Transactional
     public Map<String,Object> updateProduct(@PathVariable long id,@Valid @RequestBody ProductInput in,@AuthenticationPrincipal Jwt jwt) {
-        long shopId=ownerShopId(jwt);optionalUrl(in.imageUrl());requireProduct(id,shopId);
+        long shopId=ownerShopId(jwt);media.validate(shopId,in.imageUrl());requireProduct(id,shopId);
         if(in.version()==null)throw bad("请刷新商品资料后再编辑");
         var locked=db.queryForMap("SELECT * FROM shop_product WHERE id=? FOR UPDATE",id);
         if(!variants.list(id,true).isEmpty() && (in.stock()!=number(locked,"stock") || in.price().compareTo((BigDecimal)locked.get("price"))!=0))

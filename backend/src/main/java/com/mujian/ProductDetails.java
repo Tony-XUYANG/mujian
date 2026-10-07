@@ -13,7 +13,8 @@ public class ProductDetails {
     public static final List<String> CATEGORIES=List.of("生活日用","家居香氛","服饰箱包","文具书籍","数码配件","其他好物");
     private final JdbcTemplate db;
     private final ObjectMapper json;
-    public ProductDetails(JdbcTemplate db,ObjectMapper json){this.db=db;this.json=json;}
+    private final ShopMedia media;
+    public ProductDetails(JdbcTemplate db,ObjectMapper json,ShopMedia media){this.db=db;this.json=json;this.media=media;}
     public record Input(
         @NotBlank(message="请选择商品分类") String category,
         @Size(max=100,message="材质最多100字") String material,
@@ -26,7 +27,7 @@ public class ProductDetails {
         if(in==null)return; // 兼容旧客户端，省略扩展信息时保留已有资料。
         if(!CATEGORIES.contains(in.category()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"请选择有效商品分类");
         var images=in.images()==null?List.<String>of():in.images().stream().map(String::trim).distinct().toList();
-        images.forEach(AdminController::validateUrl);
+        images.forEach(image -> media.validateForProduct(id,image));
         try {
             db.update("""
                 INSERT INTO shop_product_detail(product_id,category,material,specification,origin,shipping_from,detail_text,image_urls)

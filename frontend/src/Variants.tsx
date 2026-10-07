@@ -3,6 +3,7 @@ import { Plus, X } from "lucide-react";
 import { api } from "./api";
 import { Modal } from "./Modal";
 import { LoadState, ProductImage, money, useRemote, type Product } from "./Commerce";
+import { CommerceImageField } from "./CommerceImageField";
 
 export type Variant = { id: number; productId: number; name: string; price: number; stock: number; onSale: boolean | number; imageUrl?: string | null; valueIds?: number[] };
 export type AttributeValue = { id?: number; attributeId?: number; value: string; sortOrder?: number };
@@ -11,10 +12,7 @@ type MatrixDraft = { id?: number; valueIds: number[]; price: number; stock: numb
 type Draft = { id?: number; name: string; price: number; stock: number; onSale: boolean; imageUrl?: string | null };
 
 function VariantImageField({ value, fallback, label, onChange }: { value?: string | null; fallback: string | null; label: string; onChange: (value: string) => void }) {
-  return <div className="variant-image-field">
-    <div className="variant-image-preview"><ProductImage src={value?.trim() || fallback} name={label + "预览"} /></div>
-    <label>{label}<input aria-label={label} maxLength={1000} value={value || ""} placeholder="图片链接，留空使用商品主图" onChange={e => onChange(e.target.value)} /><small>支持 http/https 或 /media/ 图片地址</small></label>
-  </div>;
+  return <CommerceImageField value={value} fallback={fallback} label={label} onChange={onChange} />;
 }
 export function VariantSelector({ variants, selected, onSelect }: { variants: Variant[]; selected: number | null; onSelect: (id: number) => void }) {
   return <section className="variant-picker" aria-label="商品规格">
@@ -207,8 +205,8 @@ function AttributeMatrixForm({ product, data, onSaved, onBusy }: { product: Prod
         <div className="attribute-combination-head"><strong>组合</strong><strong>售价</strong><strong>库存</strong><strong>状态</strong></div>
         {rows.map((r, i) => <div className="attribute-combination-row" key={r.id || r.valueIds.join("-") }>
           <strong>{r.valueIds.map((id, gi) => groups[gi]?.values.find((v, vi) => (v.id || -(vi + 1)) === id)?.value || "待生成").join(" / ")}</strong>
-          <input aria-label={"组合售价" + (i + 1)} type="number" min="0.01" step="0.01" value={r.price} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, price: Number(e.target.value) } : x))} />
-          <input aria-label={"组合库存" + (i + 1)} type="number" min="0" step="1" value={r.stock} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, stock: Number(e.target.value) } : x))} />
+          <label className="combination-number"><span>售价（元）</span><input aria-label={"组合售价" + (i + 1)} type="number" min="0.01" step="0.01" value={r.price} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, price: Number(e.target.value) } : x))} /></label>
+          <label className="combination-number"><span>可售库存</span><input aria-label={"组合库存" + (i + 1)} type="number" min="0" step="1" value={r.stock} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, stock: Number(e.target.value) } : x))} /></label>
           <label className="commerce-check"><input type="checkbox" checked={r.onSale} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, onSale: e.target.checked } : x))} />在售</label>
           <VariantImageField label={"组合图片" + (i + 1)} value={r.imageUrl} fallback={product.imageUrl} onChange={imageUrl => setRows(old => old.map((x, n) => n === i ? { ...x, imageUrl } : x))} />
         </div>)}
