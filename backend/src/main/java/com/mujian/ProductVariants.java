@@ -3,9 +3,11 @@ package com.mujian;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
+import java.sql.Statement;
 import java.util.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,13 +25,14 @@ public class ProductVariants {
         @NotBlank(message="请输入规格名称") @Size(max=80,message="规格名称最多80字") String name,
         @NotNull(message="请输入规格价格") @DecimalMin(value="0.01",message="规格价格需大于0") @Digits(integer=8,fraction=2,message="规格价格最多两位小数") BigDecimal price,
         @NotNull(message="请输入规格库存") @Min(value=0,message="规格库存不能为负数") @Max(value=999999,message="规格库存不能超过999999") Integer stock,
-        boolean onSale) {}
+        boolean onSale,
+        @Size(max=1000,message="规格图片地址最多1000字") String imageUrl) {}
     public record SaveInput(@NotNull(message="请刷新规格后再保存") @PositiveOrZero(message="版本不正确") Long version,
         @NotEmpty(message="至少保留一种规格") @Size(max=20,message="每件商品最多20种规格") List<@NotNull @Valid Input> items) {}
-    public record Choice(Long skuId, String name, BigDecimal price, int stock) {}
+    public record Choice(Long skuId, String name, BigDecimal price, int stock, String imageUrl) {}
 
     public List<Map<String,Object>> list(long id, boolean lock) {
-        return db.queryForList("SELECT id,product_id AS productId,name,price,stock,on_sale AS onSale FROM product_variant WHERE product_id=? ORDER BY id" + (lock ? " FOR UPDATE" : ""), id);
+        return db.queryForList("SELECT v.id,v.product_id AS productId,v.name,v.price,v.stock,v.on_sale AS onSale,vi.image_url AS imageUrl FROM product_variant v LEFT JOIN product_variant_image vi ON vi.variant_id=v.id WHERE v.product_id=? ORDER BY v.id" + (lock ? " FOR UPDATE" : ""), id);
     }
     @GetMapping("/{id}/variants")
     public Map<String,Object> read(@PathVariable long id, @AuthenticationPrincipal Jwt jwt) {
@@ -55,11 +58,20 @@ public class ProductVariants {
         if (old.isEmpty() && db.queryForObject("SELECT COUNT(*) FROM shop_order WHERE product_id=? AND status='PENDING'",Integer.class,id)>0)
             throw conflict("存在未付款的旧款订单，请处理或等待过期后再启用规格");
         for (var v : in.items()) {
+            long variantId;
             if (v.id()==null) {
-                db.update("INSERT INTO product_variant(product_id,name,price,stock,on_sale) VALUES (?,?,?,?,?)",id,v.name().strip(),v.price(),v.stock(),v.onSale());
+                var key = new GeneratedKeyHolder();
+                db.update(c -> {
+                    var ps = c.prepareStatement("INSERT INTO product_variant(product_id,name,price,stock,on_sale) VALUES (?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
+                    ps.setLong(1,id); ps.setString(2,v.name().strip()); ps.setBigDecimal(3,v.price()); ps.setInt(4,v.stock()); ps.setBoolean(5,v.onSale());
+                    return ps;
+                }, key);
+                variantId = Objects.requireNonNull(key.getKey()).longValue();
             } else {
+                variantId = v.id();
                 db.update("UPDATE product_variant SET name=?,price=?,stock=?,on_sale=? WHERE id=? AND product_id=?",v.name().strip(),v.price(),v.stock(),v.onSale(),v.id(),id);
             }
+            saveImage(variantId,v.imageUrl());
         }
         sync(id);
         return Map.of("version",db.queryForObject("SELECT version FROM shop_product WHERE id=?",Long.class,id),"items",list(id,false));
@@ -69,12 +81,21 @@ public class ProductVariants {
         var variants = list(number(product,"id"),true);
         if (variants.isEmpty()) {
             if (skuId!=null) throw conflict("这件商品没有所选规格，请刷新后重试");
-            return new Choice(null,"",(BigDecimal)product.get("price"),(int)number(product,"stock"));
+            return new Choice(null,"",(BigDecimal)product.get("price"),(int)number(product,"stock"),(String)product.get("image_url"));
         }
         if (skuId==null) throw conflict("请选择商品规格后再购买");
         var selected = variants.stream().filter(v -> number(v,"id")==skuId).findFirst().orElseThrow(() -> conflict("规格不属于当前商品"));
         if (!Boolean.TRUE.equals(selected.get("onSale"))) throw conflict("所选规格已停售，请重新选择");
-        return new Choice(skuId,(String)selected.get("name"),(BigDecimal)selected.get("price"),(int)number(selected,"stock"));
+        String image = (String)selected.get("imageUrl");
+        return new Choice(skuId,(String)selected.get("name"),(BigDecimal)selected.get("price"),(int)number(selected,"stock"),image==null||image.isBlank()?(String)product.get("image_url"):image);
+    }
+    // Call within the existing owner-checked transaction holding the product lock.
+    // Missing/null preserves images from older clients; an empty string clears it.
+    public void saveImage(long variantId, String input) {
+        if (input==null) return;
+        String image=input.strip();
+        if (!image.isEmpty()) AdminController.validateUrl(image);
+        db.update("INSERT INTO product_variant_image(variant_id,image_url) VALUES (?,?) ON DUPLICATE KEY UPDATE image_url=VALUES(image_url)",variantId,image.isEmpty()?null:image);
     }
     public void changeStock(long productId, Long skuId, int delta) {
         if (skuId==null) db.update("UPDATE shop_product SET stock=stock+?,version=version+1 WHERE id=?",delta,productId);

@@ -1257,7 +1257,7 @@ export function ProductGallery({ product: p }: { product: Product }) {
   return (
     <div className="product-gallery">
       <div className="detail-picture">
-        <ProductImage src={images[index] || null} name={p.name} />
+        <ProductImage src={images[index] || null} name={p.variantName ? p.name + " · " + p.variantName : p.name} />
         <span className="gallery-count">
           {images.length ? index + 1 : 0} / {images.length}
         </span>

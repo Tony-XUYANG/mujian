@@ -477,7 +477,7 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
     loading,
   } = useRemote<Product>("/mall/products/" + id, retry);
   const selected = p?.variants?.find((v) => v.id === skuId && v.onSale && v.stock > 0);
-  const purchaseProduct = p && selected ? { ...p, skuId: selected.id, variantName: selected.name, price: selected.price, stock: selected.stock } : p;
+  const purchaseProduct = p && selected ? { ...p, skuId: selected.id, variantName: selected.name, price: selected.price, stock: selected.stock, imageUrl: selected.imageUrl || p.imageUrl } : p;
   const ready = Boolean(purchaseProduct?.stock && (!p?.hasVariants || selected));
   return (
     <section className="commerce-page">
@@ -496,7 +496,7 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
       {p && (
         <>
           <div className="product-detail">
-            <ProductGallery product={p} />
+            <ProductGallery key={p.id + ":" + (selected?.id ?? "default") + ":" + (selected?.imageUrl || "")} product={purchaseProduct!} />
             <div className="detail-copy">
               <span className="small-tag">店铺好物</span>
               <h1>{p.name}</h1>
@@ -514,6 +514,10 @@ export function ProductPage({ id, ...props }: CommerceProps & { id: number }) {
               {Boolean(p.attributeGroups?.length) && <AttributeSelector groups={p.attributeGroups || []} variants={p.variants || []} selected={skuId} onSelect={setSkuId} />}
               {Boolean(p.hasVariants) && !p.attributeGroups?.length && <VariantSelector variants={p.variants || []} selected={skuId} onSelect={setSkuId} />}
               {Boolean(p.attributeGroups?.length && p.variants?.some(v => !v.valueIds?.length)) && <VariantSelector variants={(p.variants || []).filter(v => !v.valueIds?.length)} selected={skuId} onSelect={setSkuId} />}
+              {selected && <div className="selected-variant-preview" aria-live="polite">
+                <div className="variant-image-preview"><ProductImage src={purchaseProduct!.imageUrl} name={"已选款式：" + selected.name} /></div>
+                <div><small>当前款式</small><strong>{selected.name}</strong><span>¥ {money(selected.price)} · 库存 {selected.stock} 件</span></div>
+              </div>}
               <button
                 className="store-link"
                 onClick={() => props.onNavigate("store/" + p.shopId)}
@@ -626,6 +630,7 @@ function Checkout({
       </div>
       <p>{p.name}</p>
       {p.variantName && <p className="selected-variant">已选：{p.variantName}</p>}
+      {p.variantName && <div className="checkout-variant-image"><ProductImage src={p.imageUrl} name={p.variantName} /></div>}
       <form className="commerce-form" onSubmit={submit}>
         <fieldset disabled={busy}>
           <AddressPicker

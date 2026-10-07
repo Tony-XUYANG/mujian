@@ -46,7 +46,8 @@ public class ProductAttributeMatrix {
         @NotNull(message="请输入组合价格") @DecimalMin(value="0.01",message="组合价格需大于0")
         @Digits(integer=8,fraction=2,message="组合价格最多两位小数") BigDecimal price,
         @NotNull(message="请输入组合库存") @Min(value=0,message="组合库存不能为负数") @Max(value=999999,message="组合库存不能超过999999") Integer stock,
-        boolean onSale) {}
+        boolean onSale,
+        @Size(max=1000,message="规格图片地址最多1000字") String imageUrl) {}
 
     public record SaveInput(
         @NotNull(message="请刷新属性矩阵后再保存") @PositiveOrZero(message="版本不正确") Long version,
@@ -185,6 +186,7 @@ public class ProductAttributeMatrix {
                 ? insert("INSERT INTO product_variant(product_id,name,price,stock,on_sale) VALUES (?,?,?,?,?)", id, name, item.price(), item.stock(), item.onSale())
                 : item.id();
             if (item.id() != null) db.update("UPDATE product_variant SET name=?,price=?,stock=?,on_sale=? WHERE id=? AND product_id=?", name, item.price(), item.stock(), item.onSale(), variantId, id);
+            variants.saveImage(variantId,item.imageUrl());
             db.update("DELETE FROM product_variant_value WHERE variant_id=?", variantId);
             for (long valueId : resolved) db.update("INSERT INTO product_variant_value(variant_id,value_id) VALUES (?,?)", variantId, valueId);
         }

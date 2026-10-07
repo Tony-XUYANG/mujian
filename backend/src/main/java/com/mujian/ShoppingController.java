@@ -47,8 +47,9 @@ public class ShoppingController {
             """,uid(jwt));
         rows.addAll(db.queryForList(StoreController.PRODUCT
             .replace("SELECT p.id", "SELECT c.quantity,v.id AS skuId,v.name AS variantName,(p.status='ON_SALE' AND s.status='ACTIVE' AND v.on_sale=true) AS available,p.id")
-            .replace("p.price,p.stock", "v.price,v.stock")+
-            " JOIN product_variant v ON v.product_id=p.id JOIN variant_cart c ON c.variant_id=v.id WHERE c.user_id=? ORDER BY c.updated_at DESC,v.id DESC",uid(jwt)));
+            .replace("p.price,p.stock", "v.price,v.stock")
+            .replace("p.image_url AS imageUrl", "COALESCE(NULLIF(vi.image_url,''),p.image_url) AS imageUrl")+
+            " JOIN product_variant v ON v.product_id=p.id LEFT JOIN product_variant_image vi ON vi.variant_id=v.id JOIN variant_cart c ON c.variant_id=v.id WHERE c.user_id=? ORDER BY c.updated_at DESC,v.id DESC",uid(jwt)));
         return rows;
     }
     @PostMapping("/cart/{id}") @Transactional

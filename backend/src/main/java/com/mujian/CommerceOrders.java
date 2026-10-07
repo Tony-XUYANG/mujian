@@ -55,7 +55,7 @@ public class CommerceOrders {
               request_key,product_name,image_url,recipient,phone,address,expires_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 15 MINUTE))
             """,no,buyer,p.get("shop_id"),productId,in.quantity(),unit,unit.multiply(BigDecimal.valueOf(in.quantity())),
-            in.requestKey(),p.get("name"),p.get("image_url"),in.recipient().trim(),in.phone().trim(),in.address().trim());
+            in.requestKey(),p.get("name"),choice.imageUrl(),in.recipient().trim(),in.phone().trim(),in.address().trim());
         if(choice.skuId()!=null)db.update("INSERT INTO order_variant(order_no,variant_id,variant_name) VALUES (?,?,?)",no,choice.skuId(),choice.name());
         event(no,"PENDING","订单已提交，保留库存15分钟");
         return row(no);

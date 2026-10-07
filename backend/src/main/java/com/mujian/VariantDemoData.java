@@ -29,6 +29,9 @@ public class VariantDemoData implements CommandLineRunner {
             db.update("INSERT INTO product_variant(product_id,name,price,stock) VALUES (?, '奶油白 / 350毫升',49,12),(?, '雾蓝 / 500毫升',59,8),(?, '曜石黑 / 500毫升',69,0)",id,id,id);
         } else id=((Number)existing.getFirst().get("id")).longValue();
         seedMatrix(id);
+        seedImage(id,"奶油白 / 350毫升","/media/shop-cup.svg");
+        seedImage(id,"雾蓝 / 500毫升","/media/shop-cup-blue.svg");
+        seedImage(id,"曜石黑 / 500毫升","/media/shop-cup-black.svg");
         details.save(id,new ProductDetails.Input("生活日用","演示材质","颜色与容量可选","演示产地","演示发货地",
             "选择一种款式后即可加购或立即购买。\n同一商品不同规格可同时放入购物车。\n所有图片和参数仅用于功能体验，不构成真实商品承诺。",List.of("/media/shop-cup.svg")));
     }
@@ -45,6 +48,10 @@ public class VariantDemoData implements CommandLineRunner {
         link(productId,"奶油白 / 350毫升",cream,ml350);
         link(productId,"雾蓝 / 500毫升",blue,ml500);
         link(productId,"曜石黑 / 500毫升",black,ml500);
+    }
+    private void seedImage(long productId,String name,String image) {
+        // Existing rows, including an explicitly cleared picture, are never reset.
+        db.update("INSERT IGNORE INTO product_variant_image(variant_id,image_url) SELECT id,? FROM product_variant WHERE product_id=? AND name=?",image,productId,name);
     }
     private void link(long productId,String name,long... values) {
         var ids=db.queryForList("SELECT id FROM product_variant WHERE product_id=? AND name=?",Long.class,productId,name);

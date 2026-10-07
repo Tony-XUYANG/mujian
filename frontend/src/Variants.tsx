@@ -2,20 +2,27 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Plus, X } from "lucide-react";
 import { api } from "./api";
 import { Modal } from "./Modal";
-import { LoadState, money, useRemote, type Product } from "./Commerce";
+import { LoadState, ProductImage, money, useRemote, type Product } from "./Commerce";
 
-export type Variant = { id: number; productId: number; name: string; price: number; stock: number; onSale: boolean | number; valueIds?: number[] };
+export type Variant = { id: number; productId: number; name: string; price: number; stock: number; onSale: boolean | number; imageUrl?: string | null; valueIds?: number[] };
 export type AttributeValue = { id?: number; attributeId?: number; value: string; sortOrder?: number };
 export type AttributeGroup = { id?: number; productId?: number; name: string; sortOrder?: number; values: AttributeValue[] };
-type MatrixDraft = { id?: number; valueIds: number[]; price: number; stock: number; onSale: boolean };
-type Draft = { id?: number; name: string; price: number; stock: number; onSale: boolean };
+type MatrixDraft = { id?: number; valueIds: number[]; price: number; stock: number; onSale: boolean; imageUrl?: string | null };
+type Draft = { id?: number; name: string; price: number; stock: number; onSale: boolean; imageUrl?: string | null };
+
+function VariantImageField({ value, fallback, label, onChange }: { value?: string | null; fallback: string | null; label: string; onChange: (value: string) => void }) {
+  return <div className="variant-image-field">
+    <div className="variant-image-preview"><ProductImage src={value?.trim() || fallback} name={label + "预览"} /></div>
+    <label>{label}<input aria-label={label} maxLength={1000} value={value || ""} placeholder="图片链接，留空使用商品主图" onChange={e => onChange(e.target.value)} /><small>支持 http/https 或 /media/ 图片地址</small></label>
+  </div>;
+}
 export function VariantSelector({ variants, selected, onSelect }: { variants: Variant[]; selected: number | null; onSelect: (id: number) => void }) {
   return <section className="variant-picker" aria-label="商品规格">
     <h3>选择规格 <small>不同款式独立库存</small></h3>
     <div>{variants.map(v => <button type="button" key={v.id} aria-pressed={selected === v.id}
       disabled={!v.onSale || v.stock < 1} className={selected === v.id ? "selected" : ""}
       onClick={() => onSelect(v.id)}>
-      <strong>{v.name}</strong><span>¥ {money(v.price)} · {!v.onSale ? "已停售" : v.stock ? "剩余" + v.stock + "件" : "售罄"}</span>
+      {v.imageUrl && <span className="variant-option-image"><ProductImage src={v.imageUrl} name={v.name} /></span>}<strong>{v.name}</strong><span>¥ {money(v.price)} · {!v.onSale ? "已停售" : v.stock ? "剩余" + v.stock + "件" : "售罄"}</span>
     </button>)}</div>
   </section>;
 }
@@ -101,6 +108,7 @@ function VariantForm({ product, data, onSaved, onBusy }: { product: Product; dat
       {rows.map((r,i) => <section className="variant-editor-row" key={r.id || "new-" + i} aria-label={"规格" + (i + 1)}>
         <div className="variant-row-title"><strong>规格 {i + 1}</strong>{!r.id && rows.length > 1 && <button type="button" className="icon-button" aria-label={"移除新规格" + (i + 1)} onClick={() => setRows(old => old.filter((_,n) => n !== i))}><X size={16}/></button>}</div>
         <label>规格名称<input aria-label={"规格名称" + (i + 1)} maxLength={80} placeholder="如：奶油白 / 350毫升" value={r.name} onChange={e => edit(i,{name:e.target.value})}/></label>
+        <VariantImageField label={"规格图片" + (i + 1)} value={r.imageUrl} fallback={product.imageUrl} onChange={imageUrl => edit(i,{imageUrl})} />
         <div className="commerce-field-row">
           <label>售价（元）<input aria-label={"规格售价" + (i + 1)} type="number" min="0.01" step="0.01" value={r.price} onChange={e => edit(i,{price:Number(e.target.value)})}/></label>
           <label>可售库存<input aria-label={"规格库存" + (i + 1)} type="number" min="0" step="1" value={r.stock} onChange={e => edit(i,{stock:Number(e.target.value)})}/></label>
@@ -130,7 +138,7 @@ export type AttributeMatrixData = { version: number; groups: AttributeGroup[]; v
 
 function AttributeMatrixForm({ product, data, onSaved, onBusy }: { product: Product; data: AttributeMatrixData; onSaved: () => void; onBusy: (busy: boolean) => void }) {
   const [groups, setGroups] = useState<AttributeGroup[]>(() => data.groups.length ? data.groups.map(g => ({ ...g, values: g.values.map(v => ({ ...v })) })) : [{ name: "颜色", values: [{ value: "" }] }]);
-  const [rows, setRows] = useState<MatrixDraft[]>(() => data.variants.filter(v => v.valueIds?.length).map(v => ({ id: v.id, valueIds: v.valueIds!, price: v.price, stock: v.stock, onSale: Boolean(v.onSale) })));
+  const [rows, setRows] = useState<MatrixDraft[]>(() => data.variants.filter(v => v.valueIds?.length).map(v => ({ id: v.id, valueIds: v.valueIds!, price: v.price, stock: v.stock, onSale: Boolean(v.onSale), imageUrl: v.imageUrl })));
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const maxGroups = data.limits?.maxGroups || 3, maxValues = data.limits?.maxValuesPerGroup || 10, maxCombinations = data.limits?.maxCombinations || 20;
   function editGroup(index: number, patch: Partial<AttributeGroup>) { setGroups(old => old.map((g, i) => i === index ? { ...g, ...patch } : g)); }
@@ -153,14 +161,14 @@ function AttributeMatrixForm({ product, data, onSaved, onBusy }: { product: Prod
       const key = valueIds.join(",");
       const previous = old.get(key), saved = legacy.get(key);
       if (previous) { if (previous.id) reusedIds.add(previous.id); return { ...previous, valueIds }; }
-      if (saved) { reusedIds.add(saved.id); return { id: saved.id, valueIds, price: saved.price, stock: saved.stock, onSale: Boolean(saved.onSale) }; }
+      if (saved) { reusedIds.add(saved.id); return { id: saved.id, valueIds, price: saved.price, stock: saved.stock, onSale: Boolean(saved.onSale), imageUrl: saved.imageUrl }; }
       // When adding a new attribute group, assign each old SKU to the first
       // compatible new combination. Preserve its stock, price and order ID.
       const carry = data.variants.find(v => v.valueIds?.length && !reusedIds.has(v.id) && v.valueIds.every(id => valueIds.includes(id)));
       if (carry) {
         reusedIds.add(carry.id);
         const edited = rows.find(r => r.id === carry.id);
-        return { id: carry.id, valueIds, price: edited?.price ?? carry.price, stock: edited?.stock ?? carry.stock, onSale: edited?.onSale ?? Boolean(carry.onSale) };
+        return { id: carry.id, valueIds, price: edited?.price ?? carry.price, stock: edited?.stock ?? carry.stock, onSale: edited?.onSale ?? Boolean(carry.onSale), imageUrl: edited ? edited.imageUrl : carry.imageUrl };
       }
       return { valueIds, price: product.price, stock: 0, onSale: true };
     }));
@@ -202,6 +210,7 @@ function AttributeMatrixForm({ product, data, onSaved, onBusy }: { product: Prod
           <input aria-label={"组合售价" + (i + 1)} type="number" min="0.01" step="0.01" value={r.price} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, price: Number(e.target.value) } : x))} />
           <input aria-label={"组合库存" + (i + 1)} type="number" min="0" step="1" value={r.stock} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, stock: Number(e.target.value) } : x))} />
           <label className="commerce-check"><input type="checkbox" checked={r.onSale} onChange={e => setRows(old => old.map((x, n) => n === i ? { ...x, onSale: e.target.checked } : x))} />在售</label>
+          <VariantImageField label={"组合图片" + (i + 1)} value={r.imageUrl} fallback={product.imageUrl} onChange={imageUrl => setRows(old => old.map((x, n) => n === i ? { ...x, imageUrl } : x))} />
         </div>)}
       </div>}
     </fieldset>

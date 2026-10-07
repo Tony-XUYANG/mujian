@@ -393,6 +393,13 @@ CREATE TABLE IF NOT EXISTS order_variant (
   FOREIGN KEY (variant_id) REFERENCES product_variant(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Optional picture rows keep old product/variant schemas and orders compatible.
+CREATE TABLE IF NOT EXISTS product_variant_image (
+  variant_id BIGINT PRIMARY KEY,
+  image_url VARCHAR(1000) NULL,
+  FOREIGN KEY (variant_id) REFERENCES product_variant(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Optional attribute matrix. It augments product_variant without replacing the
 -- legacy free-form specification rows used by older products and orders.
 CREATE TABLE IF NOT EXISTS product_attribute (
