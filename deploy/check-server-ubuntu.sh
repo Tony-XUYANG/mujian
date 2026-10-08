@@ -3,6 +3,8 @@
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Run with sudo.' >&2; exit 1; }
 expected_jar="${1:-}"
+public_host="${2:?Usage: sudo bash check-server-ubuntu.sh CANDIDATE_JAR PUBLIC_HOST}"
+[[ "$public_host" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo 'Invalid public host.' >&2; exit 1; }
 current=$(readlink -f /opt/mujian/current.jar)
 [[ "$current" == /opt/mujian/releases/*.jar && -f "$current" ]] || { echo 'Installed JAR missing or unexpected.' >&2; exit 1; }
 if [[ -n "$expected_jar" ]]; then
@@ -17,7 +19,7 @@ for service in mujian mysql nginx; do
   systemctl is-enabled "$service"
 done
 nginx -t
-curl --max-time 10 --fail --silent http://127.0.0.1/api/health |
+curl --max-time 10 --fail --silent -H "Host: $public_host" http://127.0.0.1/api/health |
   python3 -c 'import json,sys; d=json.load(sys.stdin); print("Health: " + json.dumps(d)); sys.exit(0 if d.get("status")=="UP" and d.get("database")=="connected" else 1)'
 systemctl is-active --quiet mujian-backup.timer
 systemctl is-enabled mujian-backup.timer

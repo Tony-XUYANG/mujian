@@ -1,10 +1,26 @@
 # Ubuntu 测试服务器部署
 
+## 最新云端结果（2026-10-08）
+
+在用户完成腾讯云和实例免密认证后，通过OrcaTerm操作上海Ubuntu24.04，上传RC2包并核对SHA256 `a4b0a7b1c04d8ea9a4aaf04f585eeb7e2365480e28127a4a6a1d28abfe9960d7`。源码标识 `5cfc3a7c47dfd58dc616c174ff6674d35201ff5a`，解包目录 `/home/ubuntu/mujian-rc2-update.zTi12jTy/mujian-release`。完整JAR与候选包cmp一致，JAR SHA256 `16d57a8d9983257be4be6b335465ae77a69e285f42f8286caa5fff7e704c29d9`。公网21项只读检查、6项前端文件核对通过，JS/CSS为 `index-3bxjKfCR.js` / `index-BcYMA0Je.css`。
+
+升级前快照 `/var/backups/mujian/20261008T094447Z-8QdLPp64`；恢复到 `mujian_restore_20261008094819_2c41243a` 和 `/var/lib/mujian-restore/drill-F01HMr1s`。升级后RC2快照 `/var/backups/mujian/20261008T094938Z-OSZ75xYe`；恢复到 `mujian_restore_20261008094938_0294fda8` 和 `/var/lib/mujian-restore/drill-IPxgHYYL`。两次均校验每张表行数/内容和所有上传文件一致；线上数据库和上传目录未被替换。恢复目标保留供后续应用启动验证，本轮未在恢复库启动应用。
+
+应用/MySQL/Nginx/备份timer均active，带 `Host: 106.54.37.247` 的本机Nginx检查为UP/connected。timer已启用，未观察每日任务真实触发。公网商品两款49元/59元、库存12/8及配图实测正常；没有新增交易账号、订单或修改库存。整机重启、登录业务复验、域名HTTPS和真机安装仍待完成。
+
+RC2外层脚本最后请求 `http://127.0.0.1/api/health` 命中默认站点，发生JSON解析错误；应用升级已成功，正确Host复验和公网核对确认成功。仓库修复为必须传入PUBLIC_HOST，4项隔离流程测试通过；RC3包只有部署工具修复，App与云端RC2相同。RC2历史包保持原文件和校验和，勿把其尾部报错误判为JAR回退。
+
+![RC2恢复演练](screenshots/rc2-deployment/restore-result.jpg)
+
+下面早期“未部署”的文字属于历史记录，以本节最新证据为准。
+
 ## 首版候选包与本地恢复演练
 
 2026-10-08已冻结首版需求并完成本地Linux验收；新增一致性备份、隔离恢复演练与每日定时器工具，上传目录和数据库恢复匹配，恢复应用21项只读检查通过。当前用户暂无域名，先完成部署准备；本轮仍未连接服务器或配置HTTPS。旧的素材库预发布包不含新运维工具，请使用[首版候选包](https://github.com/Tony-XUYANG/mujian/releases/tag/first-release-rc2-20261008)。[范围与证据](18-首版冻结范围与交付验收.md)。
 
 ## 首版候选包的接续升级
+
+以下三参数命令适用于已修复Host检查的[RC3包](https://github.com/Tony-XUYANG/mujian/releases/tag/first-release-rc3-20261008)。RC2历史包只接受两个参数并存在尾部Host检查问题，不再用于新的接续升级。
 
 首版候选包内的 `verify-release.py` 会同时校验文件清单、SHA256 和 `SOURCE_COMMIT`，避免把旧包或改过的脚本交给 root 执行。已有上海服务器在网页终端完成登录后，先下载发布页的 `mujian-first-release-rc.tar.gz` 和校验文件，再执行：
 
@@ -12,7 +28,7 @@
 sha256sum -c mujian-first-release-rc.tar.gz.sha256
 tar -xzf mujian-first-release-rc.tar.gz
 cd mujian-release
-sudo bash apply-release-ubuntu.sh . 发布页列出的40位源码提交
+sudo bash apply-release-ubuntu.sh . 发布页列出的40位源码提交 106.54.37.247
 ```
 
 脚本顺序是：校验候选包 → 使用新备份工具生成一致性快照 → 原子切换JAR并重启 → 检查 `UP/connected`。任一步失败都会停止；升级脚本保留上一JAR，可按本文件的回退命令恢复应用。执行后用 `APP_URL=http://106.54.37.247 node scripts/verify-deployment.mjs` 做只读检查，并另外完成登录、商品选款、模拟订单和图片素材的云端验收。未连接认证终端前不要把本地结果写成云端结果。
