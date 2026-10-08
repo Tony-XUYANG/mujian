@@ -6,6 +6,44 @@
 
 本地新资源是 index-CM0BtC9d.js / index-BcYMA0Je.css。以下2026-10-07的上传裁剪版是最近一次确认成功的云端部署，不能把本地新版本的检查记为云端验收。
 
+源码提交 `d6666e00d5cc13225fbf32ad0e31f1b4d04c19b9`。已生成[Ubuntu测试预发布包](https://github.com/Tony-XUYANG/mujian/releases/tag/media-library-20261008)，包名 `mujian-media-library.tar.gz`，SHA256为 `914c7f18423ee642de7eabc6fd84af84ab7b022008ced6748eba69253a413ae6`。包内JAR、安装/升级脚本、systemd和Nginx配置逐一校验通过，SOURCE_COMMIT一致；不含本机数据库、账号或上传图片。源码与文档已推送公开仓库。
+
+本轮还从Linux对现有公网版本执行只读检查21项通过，入口仍为 `index-Dch4hN0P.js` / `index-m5D5V1vq.css`，明确确认网站继续运行旧版，没有将它记作新素材库的云端验收。
+
+### 已有上海测试服务器的接续操作
+
+在腾讯云该实例的Ubuntu网页终端中执行下面这一段。它下载并校验预发布包、备份数据库与图片、再调用原有升级脚本。备份校验仅验证归档可读，不代表完成恢复演练；任何一步失败就停止后续步骤。此段已准备并完成shell语法检查，**本轮未在服务器执行**。
+
+```bash
+(
+set -euo pipefail
+task_update_dir=$(mktemp -d /tmp/mujian-media-update.XXXXXXXX)
+cd "$task_update_dir"
+curl --fail --location --retry 2 --max-time 180 \
+  'https://github.com/Tony-XUYANG/mujian/releases/download/media-library-20261008/mujian-media-library.tar.gz' \
+  -o mujian-media-library.tar.gz
+printf '%s  %s\n' '914c7f18423ee642de7eabc6fd84af84ab7b022008ced6748eba69253a413ae6' 'mujian-media-library.tar.gz' | sha256sum -c -
+tar -xzf mujian-media-library.tar.gz
+(cd mujian-release && sha256sum -c SHA256SUMS)
+sudo bash -s <<'BACKUP'
+set -euo pipefail
+umask 077
+task_backup_dir=$(mktemp -d /var/backups/mujian/before-media-library-XXXXXXXX)
+mysqldump --single-transaction --quick --no-tablespaces --routines --triggers mujian | gzip > "$task_backup_dir/database.sql.gz"
+gzip -t "$task_backup_dir/database.sql.gz"
+tar -C /var/lib/mujian -czf "$task_backup_dir/uploads.tar.gz" uploads
+tar -tzf "$task_backup_dir/uploads.tar.gz" >/dev/null
+readlink -f /opt/mujian/current.jar > "$task_backup_dir/application-path.txt"
+(cd "$task_backup_dir" && sha256sum database.sql.gz uploads.tar.gz application-path.txt > SHA256SUMS)
+printf 'Backup archive verified: %s\n' "$task_backup_dir"
+BACKUP
+sudo bash mujian-release/update-ubuntu.sh "$task_update_dir/mujian-release"
+curl --fail --silent http://127.0.0.1/api/health
+)
+```
+
+执行成功后刷新浏览器，在「我的店铺 → 图片素材」检查入口；新入口资源应为 `index-CM0BtC9d.js`。下一步仍需对云端进行素材库API和手机页面验收。更新只新增可选元数据表，旧JAR仍可读取既有业务表；应用回退不自动删新表，不把JAR回退当作数据库恢复。
+
 适用配置：Ubuntu 24.04、2 核 4GB、至少 50GB SSD。服务器运行 Java 21、MySQL 8 和 Nginx；前后端在本地 Linux 构建，部署包仅含已打包 JAR、安装脚本、systemd 与 Nginx 配置，不含开发者数据库、上传图片或本机账号凭据。
 
 ## 本次部署结果（2026-10-07）
