@@ -1,5 +1,19 @@
 # Ubuntu 测试服务器部署
 
+## 最新接续验收（2026-10-08）
+
+RC2云端28项虚拟商城交易检查通过，公网页面中文注册/登录、49元规格下单取消、追剧收藏和视频播完均已实测。测试订单取消返库、商品下架、地址购物车清理；审计账号保留。
+
+RC2恢复目录 `/var/lib/mujian-restore/drill-IPxgHYYL` 上独立应用启动成功，12项只读资源与数据检查通过。临时服务仅绑定127.0.0.1:9082；结束后临时环境文件和unit删除，数据库权限撤销。线上应用仍active，健康接口UP/connected。[恢复应用证据](screenshots/rc2-deployment/restored-app.jpg)。四个单元均enabled，备份timer下一次计划已出现；整机重启、timer真实触发、域名HTTPS及真机安装待验。下文“恢复应用未启动/登录业务未验”属于此前状态。
+
+恢复工具 `deploy/verify-restored-app.py` 不在原RC3包中；上传核对SHA256后仅对 `/var/lib/mujian-restore/drill-*` 执行：
+
+```bash
+sudo python3 verify-restored-app.py /var/lib/mujian-restore/drill-IPxgHYYL
+```
+
+它拒绝已有临时授权/服务和不符合命名的目标，使用恢复JAR与上传文件，不替换线上数据。恢复应用启动可能执行迁移和调度，精确表内容比对须在此步骤之前完成。
+
 ## 最新云端结果（2026-10-08）
 
 在用户完成腾讯云和实例免密认证后，通过OrcaTerm操作上海Ubuntu24.04，上传RC2包并核对SHA256 `a4b0a7b1c04d8ea9a4aaf04f585eeb7e2365480e28127a4a6a1d28abfe9960d7`。源码标识 `5cfc3a7c47dfd58dc616c174ff6674d35201ff5a`，解包目录 `/home/ubuntu/mujian-rc2-update.zTi12jTy/mujian-release`。完整JAR与候选包cmp一致，JAR SHA256 `16d57a8d9983257be4be6b335465ae77a69e285f42f8286caa5fff7e704c29d9`。公网21项只读检查、6项前端文件核对通过，JS/CSS为 `index-3bxjKfCR.js` / `index-BcYMA0Je.css`。
