@@ -2,6 +2,8 @@
 
 ## 最新接续验收（2026-10-08）
 
+整机重启已执行并通过：18:32:14 CST下发reboot，新启动时间18:32:23；重连后四个单元active及enabled，健康UP/connected，公网21项检查和6项版本核对重跑通过，商城页面可重新加载。[重启证据](screenshots/rc2-deployment/reboot-result.jpg)。仍待timer真实触发、域名HTTPS和手机真机安装。
+
 RC2云端28项虚拟商城交易检查通过，公网页面中文注册/登录、49元规格下单取消、追剧收藏和视频播完均已实测。测试订单取消返库、商品下架、地址购物车清理；审计账号保留。
 
 RC2恢复目录 `/var/lib/mujian-restore/drill-IPxgHYYL` 上独立应用启动成功，12项只读资源与数据检查通过。临时服务仅绑定127.0.0.1:9082；结束后临时环境文件和unit删除，数据库权限撤销。线上应用仍active，健康接口UP/connected。[恢复应用证据](screenshots/rc2-deployment/restored-app.jpg)。四个单元均enabled，备份timer下一次计划已出现；整机重启、timer真实触发、域名HTTPS及真机安装待验。下文“恢复应用未启动/登录业务未验”属于此前状态。
