@@ -2,7 +2,22 @@
 
 ## 首版候选包与本地恢复演练
 
-2026-10-08已冻结首版需求并完成本地Linux验收；新增一致性备份、隔离恢复演练与每日定时器工具，上传目录和数据库恢复匹配，恢复应用21项只读检查通过。当前用户暂无域名，先完成部署准备；本轮仍未连接服务器或配置HTTPS。旧的素材库预发布包不含新运维工具，请使用本轮候选包。[范围与证据](18-首版冻结范围与交付验收.md)。
+2026-10-08已冻结首版需求并完成本地Linux验收；新增一致性备份、隔离恢复演练与每日定时器工具，上传目录和数据库恢复匹配，恢复应用21项只读检查通过。当前用户暂无域名，先完成部署准备；本轮仍未连接服务器或配置HTTPS。旧的素材库预发布包不含新运维工具，请使用[首版候选包](https://github.com/Tony-XUYANG/mujian/releases/tag/first-release-rc2-20261008)。[范围与证据](18-首版冻结范围与交付验收.md)。
+
+## 首版候选包的接续升级
+
+首版候选包内的 `verify-release.py` 会同时校验文件清单、SHA256 和 `SOURCE_COMMIT`，避免把旧包或改过的脚本交给 root 执行。已有上海服务器在网页终端完成登录后，先下载发布页的 `mujian-first-release-rc.tar.gz` 和校验文件，再执行：
+
+```bash
+sha256sum -c mujian-first-release-rc.tar.gz.sha256
+tar -xzf mujian-first-release-rc.tar.gz
+cd mujian-release
+sudo bash apply-release-ubuntu.sh . 发布页列出的40位源码提交
+```
+
+脚本顺序是：校验候选包 → 使用新备份工具生成一致性快照 → 原子切换JAR并重启 → 检查 `UP/connected`。任一步失败都会停止；升级脚本保留上一JAR，可按本文件的回退命令恢复应用。执行后用 `APP_URL=http://106.54.37.247 node scripts/verify-deployment.mjs` 做只读检查，并另外完成登录、商品选款、模拟订单和图片素材的云端验收。未连接认证终端前不要把本地结果写成云端结果。
+
+首版包还提供 `nginx-https.conf` 模板。拥有已备案域名并解析到服务器后，先安装证书，再把 `__DOMAIN__` 替换为真实域名、执行 `nginx -t && systemctl reload nginx`，最后检查 HTTP 自动跳转、证书链、Service Worker、Android 添加到桌面和 iPhone 添加到主屏幕。完整操作和真机记录模板见[HTTPS与手机安装验收](19-HTTPS与手机安装验收.md)。没有域名时不要启用此模板，也不要用IP地址声称完成PWA安装。
 
 ## 2026-10-08：此前素材库预发布记录
 

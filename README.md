@@ -10,7 +10,7 @@
 
 [首版范围、实现状态与验收证据](docs/18-首版冻结范围与交付验收.md) · [部署与恢复操作](docs/14-Ubuntu测试服务器部署.md) · [本地体验](http://127.0.0.1:8080/#home)
 
-[下载首版候选版 Ubuntu 部署包](https://github.com/Tony-XUYANG/mujian/releases/tag/first-release-rc-20261008)：包含最新 App、安装/升级脚本、每日备份与隔离恢复工具。发布页列出源码版本、文件校验和及验收范围；云端升级前先备份。
+[下载首版候选版 Ubuntu 部署包](https://github.com/Tony-XUYANG/mujian/releases/tag/first-release-rc2-20261008)：包含最新 App、严格发布校验、自动备份升级脚本、HTTPS 配置模板、每日备份与隔离恢复工具。发布页列出源码版本、文件校验和及验收范围；云端升级前先备份。
 
 ## 2026-10-08：商家图片素材库已完成，本地可体验
 

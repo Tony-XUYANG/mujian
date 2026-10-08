@@ -7,9 +7,9 @@ release_dir="$(realpath -- "${1:?Usage: sudo bash update-ubuntu.sh RELEASE_DIREC
 exec 9>/run/lock/mujian-maintenance.lock
 flock -n 9 || { echo 'Another backup or update is running.' >&2; exit 1; }
 cd "$release_dir"
-sha256sum -c SHA256SUMS
-[[ -f mujian.jar ]] || { echo 'Release JAR is missing.' >&2; exit 1; }
 command -v python3 >/dev/null || { echo 'Install python3 before updating.' >&2; exit 1; }
+python3 "$release_dir/verify-release.py" "$release_dir"
+[[ -f mujian.jar ]] || { echo 'Release JAR is missing.' >&2; exit 1; }
 previous="$(readlink -f /opt/mujian/current.jar)"
 [[ "$previous" == /opt/mujian/releases/*.jar && -f "$previous" ]] || { echo 'Unexpected installed JAR path.' >&2; exit 1; }
 artifact="$(sha256sum mujian.jar | cut -c1-16).jar"
@@ -30,7 +30,7 @@ switch_to() {
 }
 wait_ready() {
   for attempt in $(seq 1 45); do
-    if curl --max-time 3 --fail --silent http://127.0.0.1:8080/api/health | grep -q '"status":"UP"'; then return 0; fi
+    if curl --max-time 3 --fail --silent http://127.0.0.1:8080/api/health | python3 -c 'import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get("status")=="UP" and d.get("database")=="connected" else 1)' 2>/dev/null; then return 0; fi
     sleep 2
   done
   return 1
