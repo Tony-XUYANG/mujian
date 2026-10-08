@@ -17,6 +17,17 @@ sudo bash apply-release-ubuntu.sh . 发布页列出的40位源码提交
 
 脚本顺序是：校验候选包 → 使用新备份工具生成一致性快照 → 原子切换JAR并重启 → 检查 `UP/connected`。任一步失败都会停止；升级脚本保留上一JAR，可按本文件的回退命令恢复应用。执行后用 `APP_URL=http://106.54.37.247 node scripts/verify-deployment.mjs` 做只读检查，并另外完成登录、商品选款、模拟订单和图片素材的云端验收。未连接认证终端前不要把本地结果写成云端结果。
 
+升级后还须核对版本，旧版本也可能通过全部健康检查：
+
+```bash
+# 在本地Ubuntu项目目录执行，frontend/dist须为选定候选包的构建产物
+APP_URL=http://106.54.37.247 node scripts/verify-deployed-version.mjs
+```
+
+该脚本对比构建清单、首页、JS/CSS、SW及安装清单的SHA256，不写服务器业务数据。当前RC2预期JS为 `index-3bxjKfCR.js`，CSS为 `index-BcYMA0Je.css`；仅健康检查通过、资源仍为旧版时，不能标记升级完成。它只识别前端构建，完整JAR应另外在服务器执行 `cmp /opt/mujian/current.jar 候选包目录/mujian.jar`。
+
+仓库还提供 `deploy/check-server-ubuntu.sh`（RC2包未内置该后续检查工具），在服务器以root执行可以核对JAR、三个服务、Nginx、健康接口及备份定时器；不读取环境密钥或账号密码。需要输出的是执行结果，无需发送 `/etc/mujian/app.env` 或登录密码。
+
 首版包还提供 `nginx-https.conf` 模板。拥有已备案域名并解析到服务器后，先安装证书，再把 `__DOMAIN__` 替换为真实域名、执行 `nginx -t && systemctl reload nginx`，最后检查 HTTP 自动跳转、证书链、Service Worker、Android 添加到桌面和 iPhone 添加到主屏幕。完整操作和真机记录模板见[HTTPS与手机安装验收](19-HTTPS与手机安装验收.md)。没有域名时不要启用此模板，也不要用IP地址声称完成PWA安装。
 
 ## 2026-10-08：此前素材库预发布记录
