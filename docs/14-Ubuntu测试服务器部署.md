@@ -1,6 +1,10 @@
 # Ubuntu 测试服务器部署
 
-## 2026-10-08：素材库发布状态
+## 首版候选包与本地恢复演练
+
+2026-10-08已冻结首版需求并完成本地Linux验收；新增一致性备份、隔离恢复演练与每日定时器工具，上传目录和数据库恢复匹配，恢复应用21项只读检查通过。当前用户暂无域名，先完成部署准备；本轮仍未连接服务器或配置HTTPS。旧的素材库预发布包不含新运维工具，请使用本轮候选包。[范围与证据](18-首版冻结范围与交付验收.md)。
+
+## 2026-10-08：此前素材库预发布记录
 
 本轮素材库在Linux构建完成，本地116项验收通过，新增 shop_media_details 后共38张表。**本轮没有更新云端**：当前工具无法操作此前登录的腾讯云网页终端，本机也没有已验证主机身份并可认证的SSH连接。没有跳过主机校验或修改SSH权限。
 
@@ -43,6 +47,18 @@ curl --fail --silent http://127.0.0.1/api/health
 ```
 
 执行成功后刷新浏览器，在「我的店铺 → 图片素材」检查入口；新入口资源应为 `index-CM0BtC9d.js`。下一步仍需对云端进行素材库API和手机页面验收。更新只新增可选元数据表，旧JAR仍可读取既有业务表；应用回退不自动删新表，不把JAR回退当作数据库恢复。
+
+### 备份与恢复演练
+
+首版候选包加入了 `mujian-backup.timer`、`backup-ubuntu.sh` 和 `restore-drill-ubuntu.sh`。新安装和升级时会把脚本放到 `/opt/mujian/ops`，启用每天北京时间 04:00 的备份定时器。备份会短暂停止应用，使用数据库导出、表级行数与校验和、上传文件清单、上传归档和应用JAR组成完整快照；完成后自动启动应用并检查 `UP/connected`。备份失败会保留 `.partial-*` 目录，不会冒充成功快照。
+
+```bash
+sudo systemctl status mujian-backup.timer --no-pager
+sudo bash /opt/mujian/ops/backup-ubuntu.sh /var/backups/mujian
+sudo bash /opt/mujian/ops/restore-drill-ubuntu.sh /var/backups/mujian/某个完整快照
+```
+
+恢复演练先校验所有 SHA256 和上传归档路径，再恢复到新的 `mujian_restore_*` 数据库和 `/var/lib/mujian-restore/drill-*` 目录，核对每张表和每个上传文件后保留结果。它不会替换线上数据库、上传目录或当前JAR；演练完成后由管理员删除隔离数据库和目录。定时器的备份仍在同机，尚未达到异地灾备要求。
 
 适用配置：Ubuntu 24.04、2 核 4GB、至少 50GB SSD。服务器运行 Java 21、MySQL 8 和 Nginx；前后端在本地 Linux 构建，部署包仅含已打包 JAR、安装脚本、systemd 与 Nginx 配置，不含开发者数据库、上传图片或本机账号凭据。
 

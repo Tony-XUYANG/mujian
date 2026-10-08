@@ -41,7 +41,7 @@ try {
   const shellReady = await page.evaluate(async () => {
     const manifest = await (await fetch('/asset-manifest.json')).json();
     const files = Object.values(manifest).flatMap(entry => [entry.file, ...(entry.css || [])]);
-    const cache = await caches.open('mujian-app-v3');
+    const cache = await caches.open('mujian-app-v4');
     return (await Promise.all(files.map(file => cache.match('/' + file)))).every(Boolean);
   });
   assert.ok(shellReady, 'first visit precaches JavaScript and CSS for offline reload');

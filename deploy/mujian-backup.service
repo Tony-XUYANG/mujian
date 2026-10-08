@@ -1,0 +1,8 @@
+[Unit]
+Description=Mujian consistent database and upload backup
+After=mysql.service mujian.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /opt/mujian/ops/backup-ubuntu.sh
+UMask=0077

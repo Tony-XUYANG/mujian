@@ -11,11 +11,15 @@ cd "$release_dir"
 sha256sum -c SHA256SUMS
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y openjdk-21-jre-headless mysql-server nginx curl openssl
+apt-get install -y openjdk-21-jre-headless mysql-server nginx curl openssl python3
 install -d -m 700 /etc/mujian
 if ! id mujian >/dev/null 2>&1; then useradd --system --home /var/lib/mujian --shell /usr/sbin/nologin mujian; fi
 install -d -o mujian -g mujian -m 750 /var/lib/mujian/uploads
 install -d -m 755 /opt/mujian/releases
+install -d -m 750 /opt/mujian/ops
+install -m 750 ops-common.sh backup-ubuntu.sh restore-drill-ubuntu.sh /opt/mujian/ops/
+install -m 750 verify-backup.py /opt/mujian/ops/
+install -m 644 mujian-backup.service mujian-backup.timer /etc/systemd/system/
 
 # Do not import the developer's local database or publish its accounts.
 if [[ ! -e /etc/mujian/app.env ]]; then
@@ -72,6 +76,7 @@ systemctl enable --now nginx
 systemctl reload nginx
 systemctl enable mujian
 systemctl restart mujian
+systemctl enable --now mujian-backup.timer
 ready=false
 for attempt in $(seq 1 60); do
   if curl --fail --silent http://127.0.0.1:8080/api/health | grep -q '"status":"UP"'; then ready=true; break; fi

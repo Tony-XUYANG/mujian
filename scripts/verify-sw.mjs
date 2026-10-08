@@ -51,9 +51,10 @@ handlers.get('activate')({ waitUntil: promise => { activation = promise; } });
 await activation;
 assert.equal(stores.has('mujian-app-v1'), false);
 assert.equal(stores.has('mujian-app-v2'), false);
+assert.equal(stores.has('mujian-app-v3'), false);
 assert.equal(stores.has('mujian-offline-v1'), true);
 
-const shell = await sandbox.caches.open('mujian-app-v3');
+const shell = await sandbox.caches.open('mujian-app-v4');
 await shell.put('/assets/app.js', new Response('console.log("offline app");', { headers: { 'Content-Type': 'text/javascript' } }));
 const script = await sandbox.serve(new Request('https://mujian.test/assets/app.js'));
 assert.equal(script.status, 200);

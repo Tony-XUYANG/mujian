@@ -10,6 +10,7 @@ import { Following } from './Following';
 import { NotificationEntry, NotificationInbox } from './NotificationInbox';
 import { RecommendationFeed } from './RecommendationFeed';
 import { readDownloads, downloadKey, DOWNLOADS_KEY, type DownloadedDrama } from './downloads';
+import { OfflineVideo } from './OfflineVideo';
 import { seriesLabel } from './api';
 import './style.css';
 import './profile.css';
@@ -192,7 +193,7 @@ function OfflineLibrary({items,toast,onNavigate}:{items:DownloadedDrama[];toast:
   }
   return <div className="offline-library"><div className="page-intro"><div><p className="eyebrow">YOUR OFFLINE LIBRARY</p><h1>离线片库</h1></div><span className="offline-total">{available.length} 部已保存</span></div>
     {!available.length?<div className="empty"><Download size={34}/><h2>还没有缓存的视频</h2><p>在播放器点“离线缓存”，已保存的短剧会出现在这里。</p><button className="primary" onClick={()=>onNavigate('home')}>发现好剧</button></div>:<div className="drama-grid">{available.map(item=><div className="drama-item" key={downloadKey(item)}><button className="drama-card" onClick={()=>setSelected(item)} aria-label={`离线播放${item.title}`}><div className="poster"><img src={item.coverImg} alt={item.title+'封面'}/><div className="poster-overlay"/><span className="poster-tag">{item.category}</span><span className="poster-title">{item.title}</span><span className="poster-subtitle">幕间 · 已缓存</span><span className="play-hover"><Play size={23} fill="currentColor"/></span><span className="poster-bottom"><Download size={12}/> 可离线播放</span></div><div className="card-title"><h3>{item.title}</h3><ArrowUpRight size={16}/></div></button><button className="history-remove icon-button" aria-label={`移除${item.title}的离线缓存`} title="移除离线缓存" onClick={()=>void remove(item)}><Trash2 size={15}/></button></div>)}</div>}
-    {selected&&<Modal onClose={()=>setSelected(null)} className="player-overlay" label="离线播放"><div className="player-top"><span><Download size={17}/> 离线放映室</span><button className="icon-button" onClick={()=>setSelected(null)} aria-label="关闭离线播放"><X/></button></div><div className="video-wrap"><video src={selected.videoUrl} poster={selected.coverImg} controls playsInline autoPlay preload="metadata"/></div><div className="offline-player-info"><span className="small-tag">{selected.category}</span><h2>{selected.title}</h2><p>离线播放仅使用本机缓存；互动和同步需要网络连接。</p></div></Modal>}
+    {selected&&<Modal onClose={()=>setSelected(null)} className="player-overlay" label="离线播放"><div className="player-top"><span><Download size={17}/> 离线放映室</span><button className="icon-button" onClick={()=>setSelected(null)} aria-label="关闭离线播放"><X/></button></div><OfflineVideo url={selected.videoUrl} poster={selected.coverImg}/><div className="offline-player-info"><span className="small-tag">{selected.category}</span><h2>{selected.title}</h2><p>离线播放仅使用本机缓存；互动和同步需要网络连接。</p></div></Modal>}
   </div>;
 }
 

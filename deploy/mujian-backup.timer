@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Mujian backup (brief application pause)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Shanghai
+Persistent=false
+RandomizedDelaySec=300
+Unit=mujian-backup.service
+
+[Install]
+WantedBy=timers.target

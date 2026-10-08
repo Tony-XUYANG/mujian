@@ -1,4 +1,4 @@
-const CACHE = 'mujian-app-v3';
+const CACHE = 'mujian-app-v4';
 const MEDIA_CACHE = 'mujian-offline-v1';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png', '/asset-manifest.json'];
 self.addEventListener('install', event => {
