@@ -1,0 +1,54 @@
+.media-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:18px; }
+.media-heading h2 { display:flex; align-items:center; gap:8px; margin:0 0 8px; font-size:22px; }
+.media-heading p { color:#afa59c; line-height:1.6; margin:4px 0; font-size:13px; }
+.media-heading > button { flex-shrink:0; }
+.media-summary { display:flex; flex-wrap:wrap; gap:12px 24px; padding:16px; border:1px solid #d29a7030; border-radius:12px; background:#d29a700b; font-size:13px; color:#afa59c; margin-bottom:18px; }
+.media-summary strong { color:#f2c5a2; font-variant-numeric:tabular-nums; }
+.media-visibility { display:flex; gap:8px; margin-bottom:14px; }
+.media-visibility button { border:0; background:transparent; border-radius:20px; padding:9px 16px; color:#aaa; }
+.media-visibility button.selected { background:#d29a7020; color:#efbe99; }
+.media-toolbar { display:flex; gap:12px; align-items:center; }
+.media-search { display:flex; flex:1; min-width:0; align-items:center; gap:8px; border:1px solid #ffffff22; border-radius:10px; padding:0 12px; color:#a89d95; }
+.media-search input { width:100%; min-width:0; background:transparent; color:inherit; border:0; padding:12px 0; outline:none; }
+.media-search:focus-within { outline:2px solid #d29a70; }
+.media-filter { display:flex; gap:8px; align-items:center; font-size:13px; color:#afa59c; }
+.media-filter select { min-height:42px; border:1px solid #ffffff22; border-radius:8px; background:#25201d; color:#eee; padding:8px; }
+.media-result, .media-footnote { color:#aaa097; font-size:12px; line-height:1.8; }
+.media-footnote { margin-top:22px; }
+.media-notice { color:#e4bc9c; font-size:13px; line-height:1.6; }
+.media-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+.media-card { min-width:0; border:1px solid #ffffff15; background:#ffffff04; border-radius:12px; overflow:hidden; }
+.media-card.is-current { border-color:#d29a70; }
+.media-picture { width:100%; aspect-ratio:1; padding:0; border:0; display:block; position:relative; overflow:hidden; background:#221e1a; }
+button.media-picture:hover { filter:brightness(1.1); }
+.media-picture img { width:100%; height:100%; object-fit:cover; display:block; }
+.media-picture .product-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+.media-current { position:absolute; bottom:8px; left:8px; display:flex; gap:4px; align-items:center; border-radius:20px; background:#17120fe8; padding:5px 8px; font-size:11px; color:#f3caa7; }
+.media-card-body { padding:12px; }
+.media-card h3 { font-size:14px; margin:0 0 7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.media-dimensions { font-size:11px; margin:0 0 9px; color:#a69e98; }
+.media-usage { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
+.media-usage span { font-size:11px; background:#d29a7018; color:#e3b693; border-radius:4px; padding:3px 5px; }
+.media-usage .unused { color:#aaa; background:#ffffff0a; }
+.media-card small { font-size:11px; color:#9b938c; }
+.media-card-actions, .media-rename > div { display:flex; gap:5px; flex-wrap:wrap; margin-top:10px; }
+.media-card-actions button, .media-rename button { display:flex; align-items:center; gap:3px; padding:8px; font-size:12px; min-height:34px; }
+.media-rename input { margin-top:10px; width:100%; min-width:0; border:1px solid #d29a7060; border-radius:6px; background:#171410; color:#eee; padding:8px; }
+.media-pagination { display:flex; align-items:center; justify-content:center; gap:16px; margin:22px 0; font-size:13px; }
+.modal-backdrop.media-library-modal { z-index:110; }
+.media-library-modal > .modal { width:min(900px,94vw); max-width:900px; max-height:88dvh; overflow:auto; padding:24px; }
+.merchant-tabs { flex-wrap:wrap; }
+@media (max-width:900px) { .media-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (max-width:600px) {
+  .media-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .media-heading h2 { font-size:19px; }
+  .media-toolbar { flex-wrap:wrap; gap:10px; }
+  .media-search { flex-basis:100%; }
+  .media-filter { width:100%; }
+  .media-filter select { flex:1; }
+  .media-card-body { padding:9px; }
+  .media-card-actions button { flex:1; justify-content:center; padding:7px 4px; font-size:11px; }
+  .media-library-modal > .modal { width:96vw; padding:16px; }
+  .media-summary { gap:8px 16px; padding:12px; }
+  .merchant-tabs button { flex:1 0 40%; justify-content:center; }
+}

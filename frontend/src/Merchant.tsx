@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   Clapperboard,
+  Images,
   Package,
   Pencil,
   Plus,
@@ -13,6 +14,7 @@ import { Modal } from "./Modal";
 import { AttributeMatrixManager, VariantManager } from "./Variants";
 import { productCategories } from "./Shopping";
 import { CommerceImageField } from "./CommerceImageField";
+import { MediaLibrary } from "./MediaLibrary";
 import {
   CommerceLogin,
   LoadState,
@@ -161,6 +163,9 @@ export function Merchant(props: CommerceProps & { initialTab?: string }) {
                 <Store size={17} />
                 店铺订单
               </button>
+              <button className={tab === "media" ? "selected" : ""} onClick={() => setTab("media")}>
+                <Images size={17} />图片素材
+              </button>
             </div>
             {tab === "products" ? (
               <>
@@ -279,7 +284,7 @@ export function Merchant(props: CommerceProps & { initialTab?: string }) {
                 </div>
               </>
             ) : (
-              <Orders seller {...props} />
+              tab === "media" ? <MediaLibrary refresh={retry} /> : <Orders seller {...props} />
             )}
             {editing !== undefined && (
               <Modal

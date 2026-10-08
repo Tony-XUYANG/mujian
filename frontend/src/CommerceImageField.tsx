@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Upload, X } from 'lucide-react';
+import { Images, Upload, X } from 'lucide-react';
+import { MediaPicker } from './MediaLibrary';
 import { api } from './api';
 import { ProductImage } from './Commerce';
 import { ProfileImageEditor } from './ProfileImageEditor';
@@ -13,6 +14,7 @@ export function CommerceImageField({ value, fallback = null, label, onChange, di
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [uploaded, setUploaded] = useState(false);
+  const [picking, setPicking] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
@@ -37,12 +39,14 @@ export function CommerceImageField({ value, fallback = null, label, onChange, di
       <input ref={input} hidden type="file" accept="image/jpeg,image/png,image/webp" aria-label={'选择' + label + '文件'} disabled={disabled} onChange={e => { choose(e.target.files?.[0]); e.target.value = ''; }} />
       <div className="commerce-image-actions">
         <button type="button" className="secondary compact-button" disabled={disabled} aria-label={'上传' + label} onClick={() => input.current?.click()}><Upload size={14} />上传图片</button>
+        <button type="button" className="secondary compact-button" disabled={disabled} aria-label={'从素材库选择' + label} onClick={() => setPicking(true)}><Images size={14} />从素材库选择</button>
         {value && <button type="button" className="secondary compact-button" disabled={disabled} aria-label={'清空' + label} onClick={() => { onChange(''); setUploaded(false); }}><X size={14} />清空</button>}
       </div>
       <small>JPG、PNG、WebP · 5MB以内 · 可裁剪</small>
-      {uploaded && <small role="status">图片已上传，保存表单后生效</small>}
+      {uploaded && <small role="status">图片已选好，保存表单后生效</small>}
       {error && <p className="form-error" role="alert">{error}</p>}
     </div>
     {file && createPortal(<ProfileImageEditor file={file} kind="product" onClose={() => setFile(null)} onSave={upload} />, document.body)}
+    {picking && createPortal(<MediaPicker current={value} onClose={() => setPicking(false)} onSelect={url => { onChange(url); setUploaded(true); setError(''); setPicking(false); }} />, document.body)}
   </div>;
 }

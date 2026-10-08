@@ -232,6 +232,14 @@ CREATE TABLE IF NOT EXISTS shop_media (
   INDEX idx_shop_media_shop_time (shop_id,create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Optional library metadata; old image rows work without migration or file moves.
+CREATE TABLE IF NOT EXISTS shop_media_details (
+  media_id BIGINT PRIMARY KEY,
+  display_name VARCHAR(80) NULL,
+  archived BOOLEAN NOT NULL DEFAULT FALSE,
+  FOREIGN KEY (media_id) REFERENCES shop_media(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS drama_product (
   drama_id BIGINT NOT NULL,
   product_id BIGINT NOT NULL,
