@@ -1,0 +1,14 @@
+.git
+.runtime
+.env
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+**/target
+**/uploads
+backend/src/main/resources/static
+**/__pycache__
+docs
+scripts
+.github

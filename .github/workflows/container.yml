@@ -1,0 +1,73 @@
+name: Build and Verify Linux Container
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: container-publish
+  cancel-in-progress: false
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Choose image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Linux image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: mujian:verify
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify isolated database and container
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mujian-ci
+          chmod 700 /tmp/mujian-ci
+          python3 - <<'PY'
+          import pathlib, secrets
+          root = pathlib.Path('/tmp/mujian-ci')
+          password = secrets.token_hex(24)
+          (root/'mysql.env').write_text('MYSQL_ROOT_PASSWORD='+secrets.token_hex(24)+'\nMYSQL_DATABASE=mujian\nMYSQL_USER=mujian\nMYSQL_PASSWORD='+password+'\n')
+          (root/'app.env').write_text('DB_URL=jdbc:mysql://mujian-db:3306/mujian?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai\nDB_USER=mujian\nDB_PASSWORD='+password+'\nJWT_SECRET='+secrets.token_hex(48)+'\nSEED_DEMO=true\nADMIN_PASSWORD='+secrets.token_hex(24)+'\nDEMO_PASSWORD='+secrets.token_hex(24)+'\n')
+          PY
+          chmod 600 /tmp/mujian-ci/*.env
+          trap 'docker rm -f mujian-ci mujian-db >/dev/null 2>&1 || true; rm -rf /tmp/mujian-ci' EXIT
+          docker network create mujian-ci
+          docker run -d --name mujian-db --network mujian-ci --env-file /tmp/mujian-ci/mysql.env mysql:8.4
+          ready=false
+          for attempt in $(seq 1 60); do
+            if docker exec mujian-db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=TCP -h127.0.0.1 -u"$MYSQL_USER" "$MYSQL_DATABASE" -Nse "SELECT 1"' >/dev/null 2>&1; then ready=true; break; fi
+            sleep 2
+          done
+          test "$ready" = true
+          docker run -d --name mujian-ci --network mujian-ci --env-file /tmp/mujian-ci/app.env -p 127.0.0.1:9082:8080 mujian:verify
+          ready=false
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9082/api/health | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["status"]=="UP" and r["database"]=="connected"' 2>/dev/null; then ready=true; break; fi
+            sleep 2
+          done
+          test "$ready" = true
+          APP_URL=http://127.0.0.1:9082 node scripts/verify-deployment.mjs
+          docker exec mujian-ci sh -c 'test "$(id -u)" = 10001 && test -w /data/uploads'
+          test "$(docker inspect -f '{{.State.Running}}' mujian-ci)" = true
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish verified image
+        run: |
+          docker tag mujian:verify "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:$GITHUB_SHA"
+          echo "Verified image: $IMAGE:$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
