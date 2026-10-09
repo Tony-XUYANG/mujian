@@ -1,3 +1,6 @@
+# Bash and deployment configuration must keep Linux line endings in WSL checkouts.
 *.sh text eol=lf
+deploy/*.service text eol=lf
+deploy/*.conf text eol=lf
 Dockerfile text eol=lf
 *.yml text eol=lf
