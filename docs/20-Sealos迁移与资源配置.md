@@ -13,7 +13,7 @@
 
 ## 当前已提交配置
 
-- 应用：2核、4GiB、1副本，当前镜像 `ghcr.io/tony-xuyang/mujian:7d01ad9b2f0283b9f5f46d84f9c2ed910b4a75e5`，容器及服务端口均为8080。包含PWA安装指南及需确认的更新体验；发布前Linux独立MySQL验证通过。
+- 应用：2核、4GiB、1副本，当前镜像 `ghcr.io/tony-xuyang/mujian:d7c3922740e7f7f4112ee55013f9ed922bffa15d`，容器及服务端口均为8080。包含PWA安装更新和个人中心背景按钮遮挡修复；[Linux构建与独立MySQL验证](https://github.com/Tony-XUYANG/mujian/actions/runs/38049710881)通过。
 - 数据库：`apecloud-mysql`，版本 `ac-mysql-8.0.30-1`，1核、2GiB、10GiB，仅内网访问。连接目标为 `mujian-db-mysql.ns-ebuettxj.svc:3306/mujian`。
 - 上传存储：10GiB，挂载 `/data/uploads`。已补充非 root 运行权限与 `fsGroup=10001`，实际验证进程 UID/GID 为10001、上传目录为 `0:10001`、权限为2775且应用可写。
 - 环境变量已核对，未保留占位符；JDBC 含 `createDatabaseIfNotExist=true`，本轮使用 `SEED_DEMO=true` 初始化新环境演示数据。原站点的用户、订单和上传文件尚未迁移。
@@ -39,7 +39,7 @@
 
 `scripts/verify-deployment.mjs` 对 HTTPS 公网入口21项检查通过，覆盖健康和数据库、首页及构建资源、PWA静态文件、短剧及分集、视频Range、商城商品与规格、店铺评价、匿名接口权限。`scripts/verify-deployed-version.mjs` 对6个前端文件完成 SHA256 一致性核对。两组检查不注册用户、不下单、不修改库存。
 
-浏览器实测首页8部短剧封面与商城5件商品加载正常，未发现控制台错误；页面截图保存于 `docs/screenshots/sealos-https/`。目前 PWA 安装清单和 Service Worker 文件可通过 HTTPS 获取，尚未验证手机真机安装和公网离线使用。
+浏览器实测首页8部短剧封面与商城5件商品加载正常，未发现控制台错误；初次上线截图保存于 `docs/screenshots/sealos-https/`。后续新增线上独立浏览器16项、商城交易28项全部通过，已验证主动缓存、断网刷新播放/拖动及会话保留；头像和背景上传、刷新保留已通过，头像文件跨本次滚动部署仍可读取。修复后Pod Running/Ready、重启数0，UID/GID10001、上传卷可写；公网21项和前端SHA256 6项重跑通过。最新证据见[线上实测记录](19-HTTPS与手机安装验收.md#2026-10-10-线上浏览器实测)与 `docs/screenshots/cloud-live/`。手机真机安装、原站数据迁移和并发性能仍待验。
 
 ## 数据迁移与切换
 
