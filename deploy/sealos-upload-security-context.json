@@ -1,0 +1,25 @@
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "securityContext": {
+          "runAsNonRoot": true,
+          "runAsUser": 10001,
+          "runAsGroup": 10001,
+          "fsGroup": 10001,
+          "fsGroupChangePolicy": "OnRootMismatch",
+          "seccompProfile": { "type": "RuntimeDefault" }
+        },
+        "containers": [
+          {
+            "name": "mujian",
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": { "drop": ["ALL"] }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
