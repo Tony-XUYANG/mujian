@@ -21,6 +21,7 @@ import { Mall, Storefront, ProductPage, Orders } from './Commerce';
 import { Merchant } from './Merchant';
 import { Cart, AddressBook, ProductFavorites } from './Shopping';
 import './shopping.css';
+import { AppTools } from './AppTools';
 
 const categories = ['全部','都市','悬疑','治愈','古装','爱情'];
 const emptyInput: DramaInput = { title:'', coverImg:'/media/forest.jpg', description:'', videoUrl:'/media/sintel-trailer.mp4', category:'都市' };
@@ -32,7 +33,6 @@ const sharedDramaId = () => {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 };
 const routeNow = () => sharedDramaId() ? 'home' : window.location.hash.replace('#','') || 'home';
-type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{outcome:'accepted'|'dismissed'}> };
 
 function App() {
   const [user,setUser]=useState<User|null>(null);
@@ -52,14 +52,12 @@ function App() {
   const openEpisode=(id:number,episodeId?:number)=>{setSelectedEpisode(episodeId);setSelected(id);};
   const [notice,setNotice]=useState<Notice|null>(null);
   const [ready,setReady]=useState(false);
-  const [installPrompt,setInstallPrompt]=useState<InstallPrompt|null>(null);
   const [downloads,setDownloads]=useState<DownloadedDrama[]>(readDownloads);
   const toast=(text:string,error=false)=>setNotice({text,error});
   const reload=()=>setRefresh(n=>n+1);
   useEffect(()=>{ const change=()=>{setRoute(routeNow());setSelectedEpisode(undefined);setSelected(sharedDramaId());setQuery('');setSearch('');setCategory('全部');};window.addEventListener('hashchange',change); return()=>window.removeEventListener('hashchange',change);},[]);
   useEffect(()=>{const t=setTimeout(()=>setSearch(query.trim()),250);return()=>clearTimeout(t);},[query]);
   useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(null),3500);return()=>clearTimeout(t);},[notice]);
-  useEffect(()=>{const onInstall=(event:Event)=>{event.preventDefault();setInstallPrompt(event as InstallPrompt);};window.addEventListener('beforeinstallprompt',onInstall);return()=>window.removeEventListener('beforeinstallprompt',onInstall);},[]);
   useEffect(()=>{const update=()=>setDownloads(readDownloads());window.addEventListener('downloads-changed',update);return()=>window.removeEventListener('downloads-changed',update);},[]);
   useEffect(()=>{
     let active=true;
@@ -94,7 +92,6 @@ function App() {
   const commerceProps={user,onLogin:()=>setAuth(true),onNavigate:navigate,toast};
   const isHome=route==='home';
   const isLibrary=['home','popular','favorites','history'].includes(route);
-  async function install(){if(!installPrompt){toast('请使用浏览器菜单选择“安装幕间”');return;}await installPrompt.prompt();setInstallPrompt(null);}
   return <div className="app">
     <aside className="sidebar">
       <a className="brand" href="#home" aria-label="幕间首页"><span className="brand-icon"><Play size={23} fill="currentColor"/></span><span>幕间<small>MUJIAN</small></span></a>
@@ -114,6 +111,7 @@ function App() {
     <div className="main-shell">
       <header className="topbar"><span className="top-location">{route==='cart'?'购物车':route==='addresses'?'收货地址':route==='product-favorites'?'好物收藏':route==='mall'?'商城':route.startsWith('merchant')?'我的店铺':route==='orders'?'我的订单':route.startsWith('product/')?'商品详情':route.startsWith('store/')?'店铺':route==='notifications'?'更新提醒':route==='recommend'?'为你推荐':route==='following'?'我的追剧':route==='admin'?'创作者工作台':route==='favorites'?'我的片单':route==='popular'?'人气榜单':route==='history'?'继续观看':route==='profile'?'个人中心':'发现'}<ChevronRight size={14}/><span>{route==='admin'?'内容管理':route==='profile'?'幕间 App':'幕间短剧'}</span></span>
         {isLibrary&&<div className="search-box"><Search size={17}/><input aria-label="搜索短剧" placeholder="搜索一部好故事…" value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button className="icon-button" aria-label="清空搜索" onClick={()=>setQuery('')}><X size={14}/></button>}</div>}
+        <AppTools/>
         <button className="icon-button offline-entry" onClick={()=>navigate('offline')} aria-label="打开离线片库" title={`离线片库 · ${downloads.length} 部`}><Download size={18}/>{downloads.length>0&&<span className="offline-count">{downloads.length}</span>}</button>
         <NotificationEntry key={user?.id||'guest'} user={user} refresh={refresh} onOpen={()=>navigate('notifications')}/>
         <div className="account">{user?<><span className="avatar">{user.avatarUrl?<img src={user.avatarUrl} alt=""/>:user.nickname.slice(0,1)}</span><span className="nickname">{user.nickname}</span><button className="icon-button" onClick={logout} aria-label="退出登录" title="退出登录"><LogOut size={17}/></button></>:<button className="login-button" onClick={()=>setAuth(true)}>登录 / 注册<ArrowUpRight size={15}/></button>}</div>
@@ -215,5 +213,4 @@ function Editor({drama,onClose,onSaved}:{drama:Drama|null;onClose:()=>void;onSav
   return <Modal onClose={()=>{if(!busy)onClose();}} className="editor-overlay" label={drama?'编辑短剧':'新增短剧'}><button className="close icon-button" aria-label="关闭编辑窗口" disabled={busy} onClick={onClose}><X/></button><p className="eyebrow">STORY DETAILS</p><h2>{drama?'编辑故事':'发布一个新故事'}</h2><p className="muted">保存后，将立即展示在用户发现页。</p><form onSubmit={save}><div className="form-row"><label>短剧标题<input required maxLength={80} value={form.title} onChange={e=>field('title',e.target.value)} placeholder="给你的故事起个名字"/></label><label>分类<select value={form.category} onChange={e=>field('category',e.target.value)}>{categories.slice(1).map(c=><option key={c}>{c}</option>)}</select></label></div><label>短剧简介<textarea required maxLength={2000} rows={3} value={form.description} onChange={e=>field('description',e.target.value)} placeholder="一句话，让观众走进你的故事…"/></label><label>封面地址<input required maxLength={1000} value={form.coverImg} onChange={e=>field('coverImg',e.target.value)} placeholder="https://… 或 /media/forest.jpg"/></label><label>首集视频地址<input required maxLength={1000} value={form.videoUrl} onChange={e=>field('videoUrl',e.target.value)} placeholder="可播放的 MP4 地址"/></label><p className="field-hint">可使用已提供的本地封面与示例视频，也支持 HTTP / HTTPS 地址。</p>{error&&<p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button type="button" className="secondary" onClick={onClose} disabled={busy}>取消</button><button className="primary" disabled={busy}>{busy?<LoaderCircle className="spin" size={16}/>:<Check size={16}/>}保存短剧</button></div></form></Modal>;
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => undefined);
 createRoot(document.getElementById('root')!).render(<App/>);

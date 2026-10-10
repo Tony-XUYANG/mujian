@@ -1,5 +1,9 @@
 # 幕间 · 可安装短剧 App
 
+## 当前增量：PWA 安装与安全更新
+
+打开 HTTPS 站点后，顶部手机图标可查看「安装 App」：电脑、安卓会尝试浏览器原生安装，iPhone 提供 Safari 三步说明，并支持复制访问链接。新版本会先等待，用户点击「更新并刷新」才切换；已缓存的视频不会因应用更新丢失。实现说明与验收见[docs/21-PWA安装与更新体验.md](docs/21-PWA安装与更新体验.md)。
+
 ## 2026-10-10：Sealos HTTPS 测试站已上线
 
 [打开幕间 App](https://anthapjdimpo.sealosbja.site/#home) · [体验商城](https://anthapjdimpo.sealosbja.site/#mall) · [部署与迁移状态](docs/20-Sealos迁移与资源配置.md)

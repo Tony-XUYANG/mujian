@@ -37,7 +37,7 @@ try {
   check('本地安全上下文有有效Service Worker',await page.evaluate(()=>window.isSecureContext&&Boolean(navigator.serviceWorker.controller)));
   const manifest=await context.request.get(base+'/manifest.webmanifest');const m=await manifest.json();
   check('安装清单包含独立窗口和图标',m.display==='standalone'&&m.icons.some(i=>i.sizes==='512x512'));
-  const shell=await page.evaluate(async()=>{const manifest=await(await fetch('/asset-manifest.json')).json();const cache=await caches.open('mujian-app-v4');const paths=Object.values(manifest).flatMap(x=>[x.file,...(x.css||[])]);return(await Promise.all(paths.map(p=>cache.match('/'+p)))).every(Boolean);});
+  const shell=await page.evaluate(async()=>{const manifest=await(await fetch('/asset-manifest.json')).json();const names=(await caches.keys()).filter(key=>key.startsWith('mujian-app-'));const paths=Object.values(manifest).flatMap(x=>[x.file,...(x.css||[])]);return(await Promise.all(names.map(async name=>{const cache=await caches.open(name);return(await Promise.all(paths.map(p=>cache.match('/'+p)))).every(Boolean);}))).some(Boolean);});
   check('离线应用壳已缓存构建JS和CSS',shell);
   drama=(await api('/dramas')).find(d=>d.title==='等风，也等你');assert.ok(drama);
   episode=(await api('/dramas/'+drama.id+'/episodes'))[0];
