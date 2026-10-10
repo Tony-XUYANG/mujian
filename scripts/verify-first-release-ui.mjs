@@ -46,7 +46,7 @@ try {
   episode=(await api('/dramas/'+drama.id+'/episodes'))[0];
   await page.goto(base+'/#watch/'+drama.id);
   const player=page.getByRole('dialog',{name:'短剧播放',exact:true});await player.locator('video').waitFor();
-  await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2);
+  // preload=metadata does not promise decoded frames; start playback before waiting.
   await page.evaluate(async()=>{const v=document.querySelector('video');v.muted=true;await v.play();});
   await page.waitForFunction(()=>document.querySelector('video')?.currentTime>0.5);
   check('视频实际解码并播放',true);
