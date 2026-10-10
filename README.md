@@ -4,6 +4,10 @@
 
 打开 HTTPS 站点后，顶部手机图标可查看「安装 App」：电脑、安卓会尝试浏览器原生安装，iPhone 提供 Safari 三步说明，并支持复制访问链接。新版本会先等待，用户点击「更新并刷新」才切换；已缓存的视频不会因应用更新丢失。实现说明与验收见[docs/21-PWA安装与更新体验.md](docs/21-PWA安装与更新体验.md)。
 
+已部署到[幕间App](https://anthapjdimpo.sealosbja.site/#home)。[Linux构建](https://github.com/Tony-XUYANG/mujian/actions/runs/38047541916)、23项安装更新边界检查、Worker缓存检查通过；部署后公网21项和前端文件哈希6项通过。本地真实浏览器验证等待更新、取消不刷新和确认切换，320/390px无横向溢出。手机真机安装仍待实际设备验证。
+
+![线上安装指南](docs/screenshots/pwa-install/remote-install-guide.png)
+
 ## 2026-10-10：Sealos HTTPS 测试站已上线
 
 [打开幕间 App](https://anthapjdimpo.sealosbja.site/#home) · [体验商城](https://anthapjdimpo.sealosbja.site/#mall) · [部署与迁移状态](docs/20-Sealos迁移与资源配置.md)

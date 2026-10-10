@@ -13,7 +13,7 @@
 
 ## 当前已提交配置
 
-- 应用：2核、4GiB、1副本，镜像 `ghcr.io/tony-xuyang/mujian:92a2eb2416d8d3e7607cd1bf19ddcfd17ceb5ba0`，容器及服务端口均为8080。
+- 应用：2核、4GiB、1副本，当前镜像 `ghcr.io/tony-xuyang/mujian:7d01ad9b2f0283b9f5f46d84f9c2ed910b4a75e5`，容器及服务端口均为8080。包含PWA安装指南及需确认的更新体验；发布前Linux独立MySQL验证通过。
 - 数据库：`apecloud-mysql`，版本 `ac-mysql-8.0.30-1`，1核、2GiB、10GiB，仅内网访问。连接目标为 `mujian-db-mysql.ns-ebuettxj.svc:3306/mujian`。
 - 上传存储：10GiB，挂载 `/data/uploads`。已补充非 root 运行权限与 `fsGroup=10001`，实际验证进程 UID/GID 为10001、上传目录为 `0:10001`、权限为2775且应用可写。
 - 环境变量已核对，未保留占位符；JDBC 含 `createDatabaseIfNotExist=true`，本轮使用 `SEED_DEMO=true` 初始化新环境演示数据。原站点的用户、订单和上传文件尚未迁移。
@@ -34,6 +34,8 @@
 本次已通过平台私密连接配置实际应用上述补丁，并重建未加载补丁的旧 Pod；Pod 启动、非 root 身份、卷可写、数据库健康均已验证。配置文件只存本地忽略目录，不提交仓库或粘贴到聊天。日后平台表单变更可能重新生成 Pod 配置，变更后须再次检查 `securityContext`。公网入口及 HTTPS 已通过检查；新站登录交易、上传后重启持久化、手机安装及原站数据迁移仍需单独验收。
 
 ## 公网验收结果
+
+安装更新增量已滚动上线，仅替换镜像，保留数据库、环境变量、UID/GID10001、fsGroup和上传PVC。Pod就绪且重启数0，上传卷可写；公网21项只读检查及6项前端哈希核对再次通过。浏览器安装入口可见，安装步骤中文且按设备分流。[实现与证据](21-PWA安装与更新体验.md)。
 
 `scripts/verify-deployment.mjs` 对 HTTPS 公网入口21项检查通过，覆盖健康和数据库、首页及构建资源、PWA静态文件、短剧及分集、视频Range、商城商品与规格、店铺评价、匿名接口权限。`scripts/verify-deployed-version.mjs` 对6个前端文件完成 SHA256 一致性核对。两组检查不注册用户、不下单、不修改库存。
 

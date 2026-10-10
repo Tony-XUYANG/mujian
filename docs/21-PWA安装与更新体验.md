@@ -1,6 +1,6 @@
 # PWA 安装与更新体验
 
-2026-10-10：在可信 HTTPS 站点加入可见的「安装 App」入口和主动更新流程，补齐“项目做成 App”在网页端的最后一段用户路径。当前 App 形态仍是 PWA，不下载 APK/IPA；公网入口为 [幕间](https://anthapjdimpo.sealosbja.site/#home)。
+2026-10-10：在可信 HTTPS 站点加入可见的「安装 App」入口和主动更新流程，补齐“项目做成 App”在网页端的用户路径。已在 Sealos 上线，应用镜像提交 `7d01ad9b2f0283b9f5f46d84f9c2ed910b4a75e5`；[Linux构建与独立MySQL检查](https://github.com/Tony-XUYANG/mujian/actions/runs/38047541916)全部通过。当前 App 形态仍是 PWA，不下载 APK/IPA；公网入口为 [幕间](https://anthapjdimpo.sealosbja.site/#home)。
 
 ## 用户能看到什么
 
@@ -31,7 +31,11 @@ Service Worker 更新后，工具栏会显示新版本提示。新版本先完�
 - `node scripts/verify-sw.mjs`：Service Worker 更新激活、版本隔离、媒体缓存保留、API 排除、离线视频 Range 和错误响应通过。
 - `npm --prefix frontend run build`：TypeScript 严格编译和 Vite 生产构建通过。
 - 本地真实浏览器：先使用A版Worker，再发布测试B版；等待阶段保留A版标题，返回继续使用不刷新，确认后才切换B版；320/390px首页和安装窗口无横向溢出。预览只代理公开读接口，不向线上写入测试用户或订单。
+- Linux GitHub Actions：23项安装更新边界检查、Worker检查、生产镜像构建与独立MySQL21项部署检查通过。
+- Sealos公网：21项部署只读检查、6项前端文件SHA256核对通过，容器就绪且重启数0；UID10001和上传目录可写保持正常。浏览器已看到顶部安装入口、设备步骤和正常加载的首页/商城，无控制台错误。
 - 真机安装仍需在 Android Chrome 与 iPhone Safari 上各实测一次；浏览器视口不能替代真机结果。支付、物流和视频内容仍是演示范围。
+
+![线上安装窗口](screenshots/pwa-install/remote-install-guide.png)
 
 ![390px安装指南](screenshots/pwa-install/local-mobile-390-guide.png)
 
