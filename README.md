@@ -1,6 +1,18 @@
 # 幕间 · 可安装短剧 App
 
-## 最新验收：云端交易与恢复应用通过
+## 2026-10-10：Sealos HTTPS 测试站已上线
+
+[打开幕间 App](https://anthapjdimpo.sealosbja.site/#home) · [体验商城](https://anthapjdimpo.sealosbja.site/#mall) · [部署与迁移状态](docs/20-Sealos迁移与资源配置.md)
+
+新站运行于 Sealos 北京工作空间，HTTPS 证书验证通过，HTTP 自动跳转 HTTPS。应用与 MySQL 正常运行，图片持久卷已修复为非 root 用户可写；公网21项只读功能检查、6项前端文件哈希核对全部通过，浏览器首页和商城商品加载正常且无控制台错误。
+
+当前是新数据库的演示站，原腾讯云站点继续保留，原账号、订单及上传文件尚未迁移。支付与物流仍为模拟；本轮未重跑登录交易、上传后重启持久化及手机真机安装。下面内容为各轮历史验收记录，以本节和迁移文档为当前部署状态。
+
+![Sealos HTTPS 首页](docs/screenshots/sealos-https/home.png)
+
+![Sealos HTTPS 商城](docs/screenshots/sealos-https/mall.png)
+
+## 2026-10-09：腾讯云交易与恢复应用通过
 
 [打开云端App](http://106.54.37.247/#home)。RC2已部署上海Ubuntu：28项虚拟商城交易检查通过，覆盖中文注册登录、店铺、商品、幂等、取消返库、地址购物车及模拟支付/发货/收货。公网页面另完成中文账号注册、49元规格下单取消、重新登录、追剧收藏和视频实际播放至结束。
 

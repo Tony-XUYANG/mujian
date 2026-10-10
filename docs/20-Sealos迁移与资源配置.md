@@ -17,7 +17,7 @@
 - 数据库：`apecloud-mysql`，版本 `ac-mysql-8.0.30-1`，1核、2GiB、10GiB，仅内网访问。连接目标为 `mujian-db-mysql.ns-ebuettxj.svc:3306/mujian`。
 - 上传存储：10GiB，挂载 `/data/uploads`。已补充非 root 运行权限与 `fsGroup=10001`，实际验证进程 UID/GID 为10001、上传目录为 `0:10001`、权限为2775且应用可写。
 - 环境变量已核对，未保留占位符；JDBC 含 `createDatabaseIfNotExist=true`，本轮使用 `SEED_DEMO=true` 初始化新环境演示数据。原站点的用户、订单和上传文件尚未迁移。
-- 网络：容器和服务端口为8080，Sealos Ingress 已绑定 `anthapjdimpo.sealosbja.site` 和 `wildcard-cert`，公网入口使用 HTTPS。平台代理上传限制32MiB、读写超时300秒；数据库仍仅内网访问。
+- 网络：容器和服务端口为8080，Sealos Ingress 已绑定 `anthapjdimpo.sealosbja.site` 和 `wildcard-cert`，公网入口使用 HTTPS，HTTP 请求返回308并跳转同路径 HTTPS。平台代理上传限制32MiB、读写超时300秒；数据库仍仅内网访问。
 
 ## 容器和配置
 
@@ -31,7 +31,13 @@
 
 `deploy/fix-sealos-upload-permissions.sh` 使用工作空间 Kubeconfig，只修改 `ns-ebuettxj` 中 `mujian` StatefulSet 的运行权限：运行 UID/GID10001、`runAsNonRoot=true`、`fsGroup=10001`、`fsGroupChangePolicy=OnRootMismatch`、默认 seccomp，禁止容器提权并移除额外 capabilities。补丁位于 `deploy/sealos-upload-security-context.json`，使用 strategic merge 保留现有容器镜像、环境变量和挂载。先核对镜像和挂载路径，再进行服务器 dry-run；等待滚动更新后检查应用仍以非 root 运行且上传目录可写。旧版本 Pod 陷入 CrashLoopBackOff 且没有加载新版本时，仅重建应用 Pod，保留其 PVC 和数据库。
 
-本次已通过平台私密连接配置实际应用上述补丁，并重建未加载补丁的旧 Pod；Pod 启动、非 root 身份、卷可写、数据库健康均已验证。配置文件只存本地忽略目录，不提交仓库或粘贴到聊天。日后平台表单变更可能重新生成 Pod 配置，变更后须再次检查 `securityContext`。公网入口、HTTPS、登录交易、上传持久化及原站数据迁移仍需单独验收。
+本次已通过平台私密连接配置实际应用上述补丁，并重建未加载补丁的旧 Pod；Pod 启动、非 root 身份、卷可写、数据库健康均已验证。配置文件只存本地忽略目录，不提交仓库或粘贴到聊天。日后平台表单变更可能重新生成 Pod 配置，变更后须再次检查 `securityContext`。公网入口及 HTTPS 已通过检查；新站登录交易、上传后重启持久化、手机安装及原站数据迁移仍需单独验收。
+
+## 公网验收结果
+
+`scripts/verify-deployment.mjs` 对 HTTPS 公网入口21项检查通过，覆盖健康和数据库、首页及构建资源、PWA静态文件、短剧及分集、视频Range、商城商品与规格、店铺评价、匿名接口权限。`scripts/verify-deployed-version.mjs` 对6个前端文件完成 SHA256 一致性核对。两组检查不注册用户、不下单、不修改库存。
+
+浏览器实测首页8部短剧封面与商城5件商品加载正常，未发现控制台错误；页面截图保存于 `docs/screenshots/sealos-https/`。目前 PWA 安装清单和 Service Worker 文件可通过 HTTPS 获取，尚未验证手机真机安装和公网离线使用。
 
 ## 数据迁移与切换
 
