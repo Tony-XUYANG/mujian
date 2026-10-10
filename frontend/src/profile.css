@@ -7,6 +7,7 @@
 .profile-avatar-xl img { border-radius: 50%; }
 .profile-avatar-xl > span { right: -3px; bottom: -2px; border: 2px solid #101011; }
 .profile-change-cover { min-height: 44px; }
+.profile-change-cover { z-index: 2; }
 .profile-live-dot.is-offline { color: #b9b4ae; }
 .profile-live-dot.is-offline::before { background: #8e8c8b; box-shadow: none; }
 .profile-summary { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin: 24px 25px 0; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
