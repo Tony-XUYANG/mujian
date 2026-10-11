@@ -1,6 +1,8 @@
 # PWA 安装与更新体验
 
-2026-10-10：在可信 HTTPS 站点加入可见的「安装 App」入口和主动更新流程，补齐“项目做成 App”在网页端的用户路径。已在 Sealos 上线，应用镜像提交 `7d01ad9b2f0283b9f5f46d84f9c2ed910b4a75e5`；[Linux构建与独立MySQL检查](https://github.com/Tony-XUYANG/mujian/actions/runs/38047541916)全部通过。当前 App 形态仍是 PWA，不下载 APK/IPA；公网入口为 [幕间](https://anthapjdimpo.sealosbja.site/#home)。
+2026-10-10：在可信 HTTPS 站点加入可见的「安装 App」入口和主动更新流程，补齐“项目做成 App”在网页端的用户路径。已在 Sealos 上线，应用镜像提交 `7d01ad9b2f0283b9f5f46d84f9c2ed910b4a75e5`；[Linux构建与独立MySQL检查](https://github.com/Tony-XUYANG/mujian/actions/runs/38047541916)全部通过。公网入口为 [幕间](https://anthapjdimpo.sealosbja.site/#home)。
+
+2026-10-11：新增 Capacitor Android 封装工程，使用同一 HTTPS 站点作为应用入口，Linux/WSL 已构建 debug APK。安装包位于 [`mobile/releases/mujian-debug.apk`](../mobile/releases/mujian-debug.apk)，包名为 `com.mujian.storyapp`，目标 Android 35。该包用于真机验收；正式发布仍需配置签名密钥并构建 release APK。
 
 ## 用户能看到什么
 

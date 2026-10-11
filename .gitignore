@@ -1,5 +1,6 @@
 .runtime/
 frontend/node_modules/
+mobile/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
 backend/target/
